@@ -131,28 +131,28 @@ void walkSensorUpdate(uint32_t nowMs) {
   const float motion = sqrtf(dx * dx + dy * dy + dz * dz);
   filteredMotion = filteredMotion * 0.55f + motion * 0.45f;
 
-  // A slow tilt rotates the gravity vector but barely changes total
-  // acceleration. Require a small scalar impact as well, so orientation
-  // changes cannot remain above the motion threshold and manufacture steps.
+  // Keep a scalar impact envelope for diagnostics and future calibration. The
+  // actual step gate below uses motion hysteresis: a peak must fall back to a
+  // quiet level before another step is accepted. That lets gentle hand-held
+  // walking re-arm on every gait cycle while a device held at a new angle can
+  // produce at most one transient count instead of repeating indefinitely.
   constexpr float kMagnitudeAlpha = 0.020f;
   magnitudeBaseline += (magnitude - magnitudeBaseline) * kMagnitudeAlpha;
   const float impact = fabsf(magnitude - magnitudeBaseline);
   filteredImpact = filteredImpact * 0.50f + impact * 0.50f;
 
-  constexpr float kPeakThreshold = 0.060f;    // roughly 60 mg
-  constexpr float kImpactThreshold = 0.018f;  // roughly 18 mg
-  constexpr float kImpactRelease = 0.009f;
+  constexpr float kPeakThreshold = 0.052f;    // roughly 52 mg
+  constexpr float kReleaseThreshold = 0.038f;
   // Limit repeated peaks from one vigorous hand shake without making the
   // acceleration threshold so high that ordinary walking is missed. At most
   // about three software steps can be accepted per second.
   constexpr uint32_t kMinimumStepMs = 340UL;
   if (!peakLatched && filteredMotion >= kPeakThreshold &&
-      filteredImpact >= kImpactThreshold &&
       (!lastStepAt || nowMs - lastStepAt >= kMinimumStepMs)) {
     if (softwareSteps < 0xFFFFFFUL) softwareSteps++;
     lastStepAt = nowMs;
     peakLatched = true;
-  } else if (peakLatched && filteredImpact <= kImpactRelease) {
+  } else if (peakLatched && filteredMotion <= kReleaseThreshold) {
     peakLatched = false;
   }
 }
