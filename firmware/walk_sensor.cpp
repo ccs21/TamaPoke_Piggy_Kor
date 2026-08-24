@@ -130,7 +130,10 @@ void walkSensorUpdate(uint32_t nowMs) {
 
   constexpr float kPeakThreshold = 0.060f;    // roughly 60 mg
   constexpr float kReleaseThreshold = 0.026f;
-  constexpr uint32_t kMinimumStepMs = 280UL;
+  // Limit repeated peaks from one vigorous hand shake without making the
+  // acceleration threshold so high that ordinary walking is missed. At most
+  // about three software steps can be accepted per second.
+  constexpr uint32_t kMinimumStepMs = 340UL;
   if (!peakLatched && filteredMotion >= kPeakThreshold &&
       (!lastStepAt || nowMs - lastStepAt >= kMinimumStepMs)) {
     if (softwareSteps < 0xFFFFFFUL) softwareSteps++;
@@ -146,11 +149,11 @@ void walkSensorUpdate(uint32_t nowMs) {
 uint32_t walkSensorSteps() {
   if (!active) return 0;
   hardwareSteps = qmi.getPedometerCounter();
-  // Both detectors observe the same movement, so summing would double-count.
-  // Hardware keeps counting while the display sleeps; software supplies the
-  // immediate handheld feedback that the QMI8658 algorithm can reject.
-  const uint32_t hardwareTotal = mappedHardwareTotal(hardwareSteps);
-  return hardwareTotal > softwareSteps ? hardwareTotal : softwareSteps;
+  // The active-walk screen-rest keeps the ESP awake, so the orientation-aware
+  // software detector is authoritative. The QMI autonomous detector is much
+  // too eager during deliberate shaking (often several counts per swing) and
+  // is retained only as a restart/checkpoint reference.
+  return softwareSteps;
 }
 
 uint32_t walkSensorRawSteps() {

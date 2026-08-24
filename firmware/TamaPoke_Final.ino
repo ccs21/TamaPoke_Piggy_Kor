@@ -245,6 +245,8 @@ uint16_t walkCheckpointSavedSteps = 0;
 uint32_t walkCheckpointSavedAt = 0;
 uint32_t walkStartedEpoch = 0;
 uint64_t walkStartedUs = 0;
+bool walkScreenRest = false;
+void finishWalk(bool completionAlert = false);
 
 namespace {
 constexpr uint32_t WALK_CHECKPOINT_MAGIC = 0x57414C4BUL;  // WALK
@@ -733,10 +735,33 @@ bool staticScreenClean() {
 #define CARE_CHECK_US ((uint64_t)CARE_CHECK_SECONDS * 1000000ULL)
 #define PWR_HOLD_MENU_MS 5000UL
 
+bool activeWalkSession() {
+  return walkOpen && !walkFinished && walkSensorActive();
+}
+
+void enterWalkScreenRest() {
+  if (walkScreenRest || !activeWalkSession()) return;
+  panel->setBrightness(0);
+  panel->displayOff();
+  audioPrepareSleep();
+  walkScreenRest = true;
+  Serial.printf("WALK screen rest steps=%u elapsed=%lus\n", walkSteps,
+                (unsigned long)walkElapsedSeconds(rtcEpoch()));
+}
+
+void exitWalkScreenRest() {
+  if (!walkScreenRest) return;
+  panel->displayOn();
+  audioWake();
+  walkScreenRest = false;
+  markUiDirty();
+}
+
 void noteUserActivity(uint32_t now) {
   lastInteract = now;
   dimStage = 0;
   if (screenOff) {
+    exitWalkScreenRest();
     screenOff = false;
     screenOffAt = 0;
     screenOnlyRestStartedUs = 0;
@@ -1109,43 +1134,27 @@ void enterDeviceSleep(bool buttonStillHeld) {
   bool wakeForPwr = false;
   bool wakePwrNeedsRelease = false;
   uint64_t nextCareCheckUs = sleepStartedUs + CARE_CHECK_US;
-  uint64_t lastPwrPollUs = sleepStartedUs;
-  uint64_t lastWalkPollUs = sleepStartedUs;
   for (;;) {
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-    const bool walkingSleep = walkOpen && !walkFinished && walkSensorActive();
-    // The QMI hardware pedometer rejects many gentle hand-held movements as
-    // non-walking vibration. During a walk, wake briefly at the same 40 Hz
-    // cadence as the active software detector so sleep does not lose steps.
-    // The AMOLED, touch, audio and storage remain off. Ordinary device sleep
-    // keeps the low-power one-second poll.
-    esp_sleep_enable_timer_wakeup(walkingSleep ? 25000ULL : 1000000ULL);
+    // PWR IRQ is latched by the AXP2101, so a one-second poll keeps ordinary
+    // device sleep efficient without losing a short press. Active walks never
+    // enter this function; their screen-only rest keeps the pedometer loop up.
+    esp_sleep_enable_timer_wakeup(1000000ULL);
     esp_light_sleep_start();
 
+    uint8_t power = pwrEvents();
+    if (waitForRelease) {
+      if (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) waitForRelease = false;
+    } else if (power & (PWR_EVENT_PRESS | PWR_EVENT_SHORT)) {
+      wakeForPwr = true;
+      wakePwrNeedsRelease = (power & PWR_EVENT_PRESS) != 0 &&
+                            (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) == 0;
+      break;
+    }
+
     const uint64_t monotonicNowUs = (uint64_t)esp_timer_get_time();
-    if (walkingSleep) {
-      walkSensorUpdate((uint32_t)(monotonicNowUs / 1000ULL));
-    }
-
-    // AXP2101 button IRQs are latched, so polling them once per second still
-    // preserves a short press while avoiding 40 extra PMU I2C reads per second.
-    if (!walkingSleep || monotonicNowUs - lastPwrPollUs >= 1000000ULL) {
-      lastPwrPollUs = monotonicNowUs;
-      uint8_t power = pwrEvents();
-      if (waitForRelease) {
-        if (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) waitForRelease = false;
-      } else if (power & (PWR_EVENT_PRESS | PWR_EVENT_SHORT)) {
-        wakeForPwr = true;
-        wakePwrNeedsRelease = (power & PWR_EVENT_PRESS) != 0 &&
-                              (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) == 0;
-        break;
-      }
-    }
-
     if (walkOpen && !walkFinished) {
-      if (walkSensorActive() &&
-          monotonicNowUs - lastWalkPollUs >= 250000ULL) {
-        lastWalkPollUs = monotonicNowUs;
+      if (walkSensorActive()) {
         const uint32_t measured = walkSensorSteps();
         walkSteps = measured > 65535UL ? 65535 : (uint16_t)measured;
         saveWalkCheckpoint(false);
@@ -1266,7 +1275,7 @@ void enterDeviceSleep(bool buttonStillHeld) {
   if (wakeForWalkComplete) {
     // finishWalk stops QMI, calculates the 1000-step reward and queues the
     // completion sound after ES8311 has been fully reinitialized.
-    finishWalk();
+    finishWalk(true);
     markUiDirty();
   }
   // Random encounters are a rare wake-up event, never a background minute
@@ -1441,6 +1450,9 @@ uint16_t renderIntervalMs() {
 
 bool lightSleepAllowed(uint32_t now) {
   if (!powerSave || usbPresent() || audioBusy() || Serial.available()) return false;
+  // During a walk, software step detection and the 20-minute deadline must
+  // keep running even after the AMOLED is switched off.
+  if (activeWalkSession()) return false;
   if (pairingEventActive) return false;
   if (powerMenuOpen) return false;
   if (!screenOff && dimStage == 0) return false;
@@ -1588,10 +1600,17 @@ void loop() {
                                now - screenOffAt >= AUTO_SLEEP_AFTER_OFF_MS &&
                                autoSleepSceneSafe();
   const bool usbConnected = usbPresent();
-  bool autoSleepDue = sleepSceneReady && !usbConnected;
+  const bool walkActive = activeWalkSession();
+  bool autoSleepDue = sleepSceneReady && !usbConnected && !walkActive;
   // The secret Pikachu choice unlocks after 30 seconds on this screen. Never
   // allow either automatic or manual sleep to interrupt that waiting period.
-  if (manualSleepRequested && !pairingEventActive && !audioBusy() &&
+  if (manualSleepRequested && walkActive) {
+    manualSleepRequested = false;
+    screenOff = true;
+    screenOffAt = now;
+    enterWalkScreenRest();
+    now = millis();
+  } else if (manualSleepRequested && !pairingEventActive && !audioBusy() &&
       resetStage != RESET_IN_PROGRESS) {
     manualSleepRequested = false;
     enterDeviceSleep(false);
@@ -1648,7 +1667,9 @@ void loop() {
   // Juego/combate usan intervalos conservadores para que el redibujado no pise
   // el envio DMA del frame anterior; las pantallas estaticas se saltan si no
   // estan "dirty".
-  if (now - lastRender >= renderIntervalMs()) {
+  // While a walk is resting, keep the pedometer/timer loop responsive but do
+  // not render frames into a powered-down AMOLED controller.
+  if (!walkScreenRest && now - lastRender >= renderIntervalMs()) {
     lastRender = now;
     uint32_t rt0 = millis();
     render();
@@ -1681,6 +1702,7 @@ void updateBrightness(uint32_t now) {
     screenOff = true;
     screenOffAt = now;
   }
+  if (screenOff && activeWalkSession()) enterWalkScreenRest();
   // Sleeping changes the scene and the pet's behaviour, but it must not make
   // the AMOLED look switched off.  Only the normal inactivity timer may set
   // the panel brightness to zero.
@@ -3973,7 +3995,7 @@ void startWalk() {
   sfxPlay(SFX_EXPEDITION_START);
 }
 
-void finishWalk() {
+void finishWalk(bool completionAlert) {
   if (!walkOpen || walkFinished) return;
   uint32_t measured = walkSensorSteps();
   if (measured > walkSteps) walkSteps = measured > 65535UL ? 65535 : (uint16_t)measured;
@@ -3984,7 +4006,8 @@ void finishWalk() {
   walkReward = pet.applyWalkReward(walkSteps, (uint8_t)random(100));
   walkFinished = true;
   lastInteract = millis();
-  sfxPlay(walkReward.count == 0 ? SFX_TAP : SFX_EXPEDITION_FOUND);
+  if (completionAlert) careAlertSoundPlay();
+  else sfxPlay(walkReward.count == 0 ? SFX_TAP : SFX_EXPEDITION_FOUND);
 }
 
 void updateWalk(uint32_t now) {
@@ -3999,7 +4022,7 @@ void updateWalk(uint32_t now) {
   if (!epoch) epoch = pet.lastSeenEpoch;
   if (walkSteps >= 1000 || walkTimeExpired(epoch)) {
     if (screenOff) noteUserActivity(now);
-    finishWalk();
+    finishWalk(true);
   }
 }
 
