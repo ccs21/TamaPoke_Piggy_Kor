@@ -88,6 +88,7 @@ bool galleryDirty = false;
 int galleryPage = 0;        // 10 paginas de 16
 int16_t galleryDetail = 0;  // dex en vista detalle, 0 = rejilla
 uint8_t galleryFilter = 0;  // 0 todos, 1 criados, 2 capturados, 3 comunicacion
+bool galleryShowShiny = false;  // 상세 화면의 일반/이로치 모습
 
 bool screenOff = false;
 uint32_t screenOffAt = 0;
@@ -2146,6 +2147,7 @@ void onSwipe(int dir) {
   }
   if (galleryDetail) {  // en detalle: volver a la rejilla
     galleryDetail = 0;
+    galleryShowShiny = false;
     galleryPmd.unload();
     galleryDirty = true;
     lockTouchBrief();
@@ -9070,7 +9072,7 @@ void renderGallery() {
     bool known = pet.isKnown(galleryDetail);
     char head[24];
     snprintf(head, sizeof(head), "N.%03d %s%s", galleryDetail,
-             pet.isShinyRegistered(galleryDetail) ? "*" : "", known ? dexName(galleryDetail) : "???");
+             galleryShowShiny ? "*" : "", known ? dexName(galleryDetail) : "???");
     gfx->setTextColor(known ? d.accent : UI_INK);
     gfx->setTextSize(3);
     int gts = gfx->textWidth(head) <= 234 ? 3 : 2;  // 긴 이름은 자동 축소
@@ -9185,8 +9187,19 @@ void renderGallery() {
 }
 
 void galleryTap(int16_t x, int16_t y) {
-  if (galleryDetail) {  // volver a la rejilla
+  if (galleryDetail) {
+    // 이로치를 얻은 포켓몬은 중앙 스프라이트를 터치하면 전환한다.
+    if (pet.isShinyRegistered(galleryDetail) &&
+        x >= 105 && x <= 361 && y >= 112 && y <= 340) {
+      galleryShowShiny = !galleryShowShiny;
+      galleryPmd.unload();
+      galleryPmd.load(galleryDetail, galleryShowShiny);
+      sfxPlay(SFX_MENU);
+      return;
+    }
+    // 스프라이트 바깥을 터치하면 목록으로 돌아간다.
     galleryDetail = 0;
+    galleryShowShiny = false;
     galleryPmd.unload();
     galleryDirty = true;
     sfxPlay(SFX_TAP);
@@ -9214,7 +9227,8 @@ void galleryTap(int16_t x, int16_t y) {
   int16_t dex = galleryDexAt(galleryPage * 16 + r * 4 + c);
   if (dex <= 0) return;
   galleryDetail = dex;
-  galleryPmd.load(dex, pet.isShinyRegistered(dex));
+  galleryShowShiny = false;
+  galleryPmd.load(dex, false);
   sfxPlay(SFX_MENU);
   if (pet.isKnown(dex)) speciesChirpPlay(dex);
 }
