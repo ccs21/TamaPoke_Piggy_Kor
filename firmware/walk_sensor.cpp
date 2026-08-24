@@ -14,11 +14,12 @@ uint32_t hardwareAnchorRaw = 0;
 uint32_t hardwareAnchorTotal = 0;
 uint32_t lastSampleAt = 0;
 uint32_t lastStepAt = 0;
-uint32_t peakStartedAt = 0;
 float gravityX = 0.0f;
 float gravityY = 0.0f;
 float gravityZ = 1.0f;
 float filteredMotion = 0.0f;
+float magnitudeBaseline = 1.0f;
+float filteredImpact = 0.0f;
 uint8_t calibrationSamples = 0;
 bool peakLatched = false;
 
@@ -35,11 +36,12 @@ void resetSoftwareDetector(uint32_t total) {
   softwareSteps = total;
   lastSampleAt = 0;
   lastStepAt = 0;
-  peakStartedAt = 0;
   gravityX = 0.0f;
   gravityY = 0.0f;
   gravityZ = 1.0f;
   filteredMotion = 0.0f;
+  magnitudeBaseline = 1.0f;
+  filteredImpact = 0.0f;
   calibrationSamples = 0;
   peakLatched = false;
 }
@@ -111,6 +113,7 @@ void walkSensorUpdate(uint32_t nowMs) {
     gravityX += (x - gravityX) * alpha;
     gravityY += (y - gravityY) * alpha;
     gravityZ += (z - gravityZ) * alpha;
+    magnitudeBaseline += (magnitude - magnitudeBaseline) * alpha;
     calibrationSamples++;
     return;
   }
@@ -128,20 +131,28 @@ void walkSensorUpdate(uint32_t nowMs) {
   const float motion = sqrtf(dx * dx + dy * dy + dz * dz);
   filteredMotion = filteredMotion * 0.55f + motion * 0.45f;
 
+  // A slow tilt rotates the gravity vector but barely changes total
+  // acceleration. Require a small scalar impact as well, so orientation
+  // changes cannot remain above the motion threshold and manufacture steps.
+  constexpr float kMagnitudeAlpha = 0.020f;
+  magnitudeBaseline += (magnitude - magnitudeBaseline) * kMagnitudeAlpha;
+  const float impact = fabsf(magnitude - magnitudeBaseline);
+  filteredImpact = filteredImpact * 0.50f + impact * 0.50f;
+
   constexpr float kPeakThreshold = 0.060f;    // roughly 60 mg
-  constexpr float kReleaseThreshold = 0.026f;
+  constexpr float kImpactThreshold = 0.018f;  // roughly 18 mg
+  constexpr float kImpactRelease = 0.009f;
   // Limit repeated peaks from one vigorous hand shake without making the
   // acceleration threshold so high that ordinary walking is missed. At most
   // about three software steps can be accepted per second.
   constexpr uint32_t kMinimumStepMs = 340UL;
   if (!peakLatched && filteredMotion >= kPeakThreshold &&
+      filteredImpact >= kImpactThreshold &&
       (!lastStepAt || nowMs - lastStepAt >= kMinimumStepMs)) {
     if (softwareSteps < 0xFFFFFFUL) softwareSteps++;
     lastStepAt = nowMs;
-    peakStartedAt = nowMs;
     peakLatched = true;
-  } else if (peakLatched &&
-             (filteredMotion <= kReleaseThreshold || nowMs - peakStartedAt >= 650UL)) {
+  } else if (peakLatched && filteredImpact <= kImpactRelease) {
     peakLatched = false;
   }
 }
