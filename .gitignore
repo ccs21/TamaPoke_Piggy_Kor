@@ -1,5 +1,11 @@
 # artefactos de compilacion
 build/
+_build/
+release/
+flasher/bin/
+flasher/obj/
+flasher/payload/
+Additional_assets.zip
 
 # cacheas y artefactos regenerables del taller
 tools/downloads/

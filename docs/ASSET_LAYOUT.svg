@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="680" viewBox="0 0 1000 680">
+  <rect width="1000" height="680" fill="#f6f7fb"/>
+  <style>
+    text { font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; fill:#172033 }
+    .title { font-size:28px; font-weight:700 }
+    .head { font-size:20px; font-weight:700 }
+    .body { font-size:16px }
+    .small { font-size:14px; fill:#46536b }
+    .canvas { fill:#fff; stroke:#33415c; stroke-width:3 }
+    .safe { fill:none; stroke:#7b8ba8; stroke-width:2; stroke-dasharray:8 7 }
+  </style>
+  <text x="40" y="48" class="title">Additional_assets 이미지 배치 도식</text>
+
+  <text x="55" y="92" class="head">L01 — 350×350 로딩 화면</text>
+  <rect x="55" y="112" width="300" height="300" rx="8" class="canvas" fill="#000"/>
+  <rect x="75" y="132" width="260" height="260" rx="6" class="safe"/>
+  <circle cx="205" cy="252" r="74" fill="#1d2b48" stroke="#fff" stroke-width="4"/>
+  <text x="205" y="258" text-anchor="middle" fill="#fff" style="font-size:22px;font-weight:700">중요 영역</text>
+  <text x="55" y="438" class="small">검은 배경 합성 · 글자와 그림은 가장자리에서 20px 이상 안쪽</text>
+
+  <text x="405" y="92" class="head">S01~S03 — 같은 캔버스·같은 원점</text>
+  <rect x="405" y="112" width="300" height="300" rx="8" class="canvas"/>
+  <path d="M475 245 Q555 145 635 245 L620 290 Q555 322 490 290 Z" fill="#6a9bb8" opacity=".72"/>
+  <ellipse cx="555" cy="280" rx="83" ry="65" fill="#eedfca" opacity=".82"/>
+  <ellipse cx="485" cy="350" rx="38" ry="24" fill="#c8d7df" opacity=".95"/>
+  <ellipse cx="625" cy="350" rx="38" ry="24" fill="#c8d7df" opacity=".95"/>
+  <line x1="555" y1="112" x2="555" y2="412" stroke="#d44" stroke-width="2" stroke-dasharray="6 5"/>
+  <line x1="405" y1="262" x2="705" y2="262" stroke="#d44" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="555" y="438" text-anchor="middle" class="small">S01 뒤 → S02 가운데 → S03 앞 · 부품을 이동시키지 않음</text>
+
+  <text x="755" y="92" class="head">디그다 프레임</text>
+  <g transform="translate(755 125) scale(5)">
+    <rect width="22" height="17" fill="#fff" stroke="#33415c" stroke-width=".5"/>
+    <ellipse cx="11" cy="14" rx="9" ry="2.4" fill="#8b5f43"/>
+    <rect x="8" y="6" width="6" height="8" rx="3" fill="#a96f58"/>
+  </g>
+  <text x="755" y="232" class="body">D01~D04: 22×17 고정</text>
+  <text x="755" y="258" class="body">DD: 22×16 고정</text>
+  <text x="755" y="287" class="small">모든 프레임의 중심과</text>
+  <text x="755" y="308" class="small">땅굴 위치를 동일하게</text>
+
+  <rect x="40" y="490" width="920" height="150" rx="16" fill="#e9edf5" stroke="#a7b2c7"/>
+  <text x="65" y="528" class="head">잠만보 레이어 제작 순서</text>
+  <text x="65" y="561" class="body">① 완성 그림을 350×350 투명 캔버스에 배치</text>
+  <text x="65" y="591" class="body">② 파일을 4장 복제</text>
+  <text x="450" y="561" class="body">③ S01/S02/S03에서 해당 부품만 남기고 나머지를 투명화</text>
+  <text x="450" y="591" class="body">④ S01+S02+S03을 겹쳐 원본과 같은지 확인 · S04는 깬 모습 전체</text>
+  <text x="65" y="620" class="small">플래셔는 116×116으로 축소하고 게임은 3배 확대합니다. 작은 선과 반투명 그림자는 뭉개질 수 있습니다.</text>
+</svg>

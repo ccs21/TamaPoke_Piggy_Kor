@@ -1,40 +1,56 @@
 # Credits
 
-TamaPoke is a **non-commercial, personal-use** project. It does not sell or
-commercially redistribute any copyrighted material. Pokémon and all related
-names, designs and characters are trademarks and © of **Nintendo / Game Freak /
-The Pokémon Company**.
+## Project lineage
 
-This project is not affiliated with or endorsed by any of those companies.
+- Original project: [socquique/TamaPoke](https://github.com/socquique/TamaPoke),
+  created by Quique Tortosa and published under the MIT License.
+- Initial development base: the
+  [tamapoke-expanded-update](https://github.com/ShadowEnemyx/TamaPoke/tree/tamapoke-expanded-update)
+  branch maintained by ShadowEnemyx.
+- Korean edition, current firmware features, UI, power management,
+  communication, minigames and Windows flasher: ccs21.
 
-## Sprites and data
+The original copyright and MIT notice are retained in `LICENSE`.
 
-| Resource | Source | Use in the project |
-|---|---|---|
-| **All sprites** (idle, walk, sleep, eat, hurt, attack…) | [PMD Sprite Collaboration (PMDCollab/SpriteCollab)](https://github.com/PMDCollab/SpriteCollab) | Mystery-Dungeon-style animated sprites used everywhere: main screen, stat card, minigame, and the Pokédex grid + detail view |
-| **Gen 1 base stats** | [PokéAPI](https://pokeapi.co) | Real ATK/DEF/SPD/HP for each species |
+## Sprite source used by the local installer
 
-The **SpriteCollab** sprites are the work of its community of artists under their
-own terms (Creative Commons Attribution-NonCommercial 4.0). Per-species/per-author
-credit is in the original repository's
-[tracker.json](https://github.com/PMDCollab/SpriteCollab/blob/master/tracker.json).
-Huge thanks to that whole community for an enormous amount of work.
+The repository and public flasher do not bundle Pokémon sprite images or
+packed sprite files. During installation, the user's PC downloads the required
+source files directly from
+[PMDCollab/SpriteCollab](https://github.com/PMDCollab/SpriteCollab), selects the
+animations used by the firmware and creates local TPK3 files.
 
-> **Important if you reuse this repo:** the packaged sprite files
-> (`tools/sdcard/mons/*.bin`) are derived from the sources above. Don't
-> redistribute them commercially. If you publish the project, the clean approach
-> is to distribute **only the code and scripts**, and have each user download and
-> package the sprites from the original sources with `tools/pack_*.py` (or the web
-> installer).
+SpriteCollab artwork is contributed by its community and is published by that
+project under [CC BY-NC 4.0](https://github.com/PMDCollab/SpriteCollab/blob/master/LICENSE.md).
+Per-species and per-author attribution is maintained by SpriteCollab in
+`tracker.json` and `credit_names.txt`. The flasher downloads and retains those
+files with its local cache. The license only covers rights its licensors are
+authorized to grant; no endorsement or additional trademark rights are
+implied.
 
-## Software / hardware
+## Data, font and libraries
 
-| Component | Author / source |
-|---|---|
-| GFX Library for Arduino | [moononournation](https://github.com/moononournation/Arduino_GFX) |
-| SensorLib (CST9217 touch, PCF85063 RTC) | [Lewis He / lewisxhe](https://github.com/lewisxhe/SensorLib) |
-| XPowersLib (AXP2101 PMU) | [Lewis He / lewisxhe](https://github.com/lewisxhe/XPowersLib) |
-| Board and pinout | [Waveshare ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75) |
-| Web installer | [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Nabu Casa) |
+- Species and move reference data: [PokéAPI](https://pokeapi.co)
+- Korean bitmap font source: Noto Sans KR, SIL Open Font License 1.1
+- Arduino GFX Library: moononournation and upstream contributors
+- SensorLib and XPowersLib: Lewis He / lewisxhe
+- Arduino ESP32 Core and ESP-IDF components: Espressif Systems
+- NAudio: Mark Heath and contributors
+- Board and pinout: Waveshare ESP32-S3-Touch-AMOLED-1.75 / 1.75C
 
-TamaPoke's own code (firmware and tools) is original work.
+See `THIRD_PARTY_NOTICES.md` for license details.
+
+## User-supplied assets
+
+Loading, capture, Snorlax and Diglett images and all additional scene/effect
+audio are not included. Each user supplies those files locally in
+`Additional_assets.zip`. The flasher processes them only on that user's PC and
+does not upload them. Users must provide only files they created themselves or
+for which they hold the rights needed for software embedding, editing and use.
+
+## Unofficial project notice
+
+This is an unofficial, non-commercial fan project and is not affiliated with
+or endorsed by The Pokémon Company, Nintendo, Creatures, GAME FREAK or Bandai.
+Related names, characters, designs and trademarks belong to their respective
+rights holders.

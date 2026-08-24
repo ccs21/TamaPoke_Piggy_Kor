@@ -1,368 +1,154 @@
-# TamaPoke
+# 타마포케 한글판
 
-[![Flash in browser](https://img.shields.io/badge/flash-in%20browser-FF6B00?logo=googlechrome&logoColor=white)](https://socquique.github.io/TamaPoke/web/)
-[![MakerWorld](https://img.shields.io/badge/MakerWorld-3D%20case-00AE42?logo=bambulab&logoColor=white)](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi)
-![Board](https://img.shields.io/badge/board-ESP32--S3%20round%20AMOLED-E7352C?logo=espressif&logoColor=white)
-![Firmware](https://img.shields.io/badge/firmware-v1.2-8A2BE2)
-![Code](https://img.shields.io/badge/code-MIT-blue)
-![Languages](https://img.shields.io/badge/languages-6-FFCB05)
-[![Stars](https://img.shields.io/github/stars/socquique/TamaPoke?style=flat&logo=github&color=yellow)](https://github.com/socquique/TamaPoke/stargazers)
+Waveshare ESP32-S3-Touch-AMOLED-1.75 및 1.75C용 비공식·비상업 한글판
+펌웨어와 Windows 통합 플래셔의 공개 소스입니다.
 
-A gen-1-Pokémon-inspired tamagotchi for the
-**Waveshare ESP32-S3-Touch-AMOLED-1.75** (round 466×466 AMOLED, CO5300 driver
-over QSPI, CST9217 touch over I2C). Raise any of the 151, evolve it, train it
-and complete them all (shinies included).
+> [!IMPORTANT]
+> 이 저장소와 공개 플래셔에는 포켓몬 스프라이트, 추가 이미지, 추가 음원,
+> 스프라이트가 결합된 완성 펌웨어가 들어 있지 않습니다. 설치에 필요한
+> 스프라이트는 최종 사용자의 PC가 원본 저장소에서 직접 내려받으며, 추가
+> 이미지와 음원은 사용자가 직접 준비합니다.
 
-> **Personal, non-commercial fan project.** Code is MIT; the sprites are from
-> PMD SpriteCollab (CC BY-NC, Pokémon © Nintendo/Game Freak), and the 3D case is
-> CC BY-NC-SA. See **[License](#license)** and **Credits**.
+> [!WARNING]
+> **플래셔가 생성한 완성 펌웨어(`*-full.bin`)를 제3자에게 재배포하지
+> 마십시오.** 완성 펌웨어에는 이 저장소의 MIT 소스 외에 다운로드한
+> 스프라이트와 사용자가 제공한 자산이 결합됩니다. 이들 자산은 MIT
+> 라이선스의 대상이 아니며, 재배포자는 각 자산의 이용 조건과 권리자의
+> 문제 제기에 대한 책임을 직접 부담할 수 있습니다.
 
-🔴 **3D-printed Pokéball case + print profiles → [on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi)** · flash it in your browser → **[web installer](https://socquique.github.io/TamaPoke/web/)**
+## 프로젝트 계보
 
-## Status
+- 원본: [socquique/TamaPoke](https://github.com/socquique/TamaPoke)
+- 초기 개발 기반: [ShadowEnemyx/TamaPoke의 tamapoke-expanded-update 브랜치](https://github.com/ShadowEnemyx/TamaPoke/tree/tamapoke-expanded-update)
+- 한글판 및 현행 기능 수정: ccs21
 
-Running on hardware. Implemented: the 151 + shinies animated from microSD, full
-life cycle (egg by rarity → evolution → farewell/release/runaway, each gated
-behind a decision dialog), bred-Pokédex with gallery, battle stats (genes +
-training), retention hooks (streak / bond / medals / name), biome + real-time
-backgrounds, ball minigame, training bag, animated bath, RTC with offline
-progression, battery (AXP2101) and PWR button, anti-burn-in dimming,
-**sound (ES8311)**, **6 UI languages (English default)**, **starter choice on
-first run**, and a one-click **web installer**.
+개발은 위 확장 브랜치에서 시작했지만 이후 펌웨어, UI, 전력 관리, 통신,
+미니게임, Windows 플래셔와 자산 처리 방식이 광범위하게 변경되었습니다.
+원저작자의 MIT 고지와 프로젝트 계보는 계속 유지합니다.
 
-Pending: wild encounters / battle (designed, not implemented), 3D case, soak
-test. See **Roadmap**.
+## 공개 범위
 
-## Game manual (the actual numbers)
+이 저장소에 포함되는 것:
 
-A quick reference to how the game really works (values straight from the code).
+- 1.75 및 1.75C 공용 펌웨어 소스
+- 자산이 없는 기본 프로그램을 만드는 빌드 스크립트
+- 사용자의 PC에서 자산을 준비하고 완성 펌웨어를 만드는 Windows 플래셔 소스
+- 설치·자산 제작·라이선스 안내 문서
 
-### Time & leveling
-- **1 real minute = 1 in-game minute.** Your Pokémon gains **+1 level every hour**
-  of real time. Leveling is purely time-based — caring well doesn't speed it up,
-  but neglect *delays evolution*.
-- It keeps **aging while powered off** (the RTC runs), catching up to **2 weeks** max.
+포함되지 않는 것:
 
-### The four stats (0–100)
-Needs: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene). Start 80 / 80 / 80 / 100.
-While **awake**, per minute:
+- 포켓몬 스프라이트 및 가공된 TPK3 스프라이트
+- 로딩·포획·잠만보·디그다 이미지
+- 케어·포획·진화 효과음 및 각종 BGM
+- 개인용 프로젝트, 개인용 자산, 저장 데이터
+- 스프라이트와 추가 자산이 합쳐진 전체 펌웨어
 
-| Stat | Drain/min | Notes |
-|---|---|---|
-| FOOD | −2 | |
-| ENE | −1 | −1 extra if overweight (weight > 50 → sluggish) |
-| HYG | −1 | **−4 more per poop** on screen (max 3 poops) |
-| JOY | −1 | **−2 extra** if FOOD < 30, **−2 extra** if HYG < 30 |
+## 설치 방법
 
-- ~**15 %/min** chance to poop (only if FOOD > 40). Poops tank hygiene fast.
-- **Care slip-up** = letting any stat hit **≤ 10** (30-min cooldown so it counts once).
-  Each slip-up **delays evolution by 1 level** and cools the bond.
+1. GitHub 릴리스에서 공개 플래셔 ZIP을 받아 원하는 폴더에 풉니다.
+2. [Additional_assets.zip 상세 제작 안내](docs/ADDITIONAL_ASSETS_GUIDE.md)에
+   따라 본인이 사용할 권리가 있는 이미지와 음원을 준비합니다.
+3. `Additional_assets.zip`을 `TamaPoke-Flasher.exe`와 같은 폴더에 둡니다.
+4. ESP32-S3 기기의 화면이 켜진 상태로 USB-C 데이터 케이블을 연결합니다.
+5. 플래셔를 실행하고 `새로고침`으로 자산 감지 상태를 확인합니다.
+6. `자동 확인 후 설치`를 누릅니다.
 
-### Actions
-- 🍎 **Berry** (3 flavors): +25 FOOD. Each species has a **hidden favorite flavor**
-  → +35 FOOD, +10 JOY, ♥, bond, and it gets revealed.
-- 🍬 **Candy:** +10 FOOD, +12 JOY, but **+12 weight** (fattening).
-- ⚽ **Play / minigame:** +JOY, −ENE; the minigame trains **SPEED** and burns weight.
-- 🥊 **Training bag:** trains **STRENGTH** (~4 hits = 1 pt, cap +18/session), tires it.
-- 🫧 **Bath:** clears poops, HYG → 100.
-- 👆 **Pet it:** +5 JOY + bond.
-- 🌙 **Sleep:** rest — ENE **+6/min**, needs drain ~**4× slower** with floors
-  (FOOD 30 / JOY 35 / HYG 45). No poops, no slip-ups, can't run away while asleep.
+일반 사용자는 Arduino, Python 또는 별도의 빌드 환경을 준비할 필요가
+없습니다. 처음 실행할 때 플래셔가 필요한 설치 도구와 스프라이트를 내려받기
+때문에 인터넷 연결이 필요합니다. 플래셔는 플래시 용량으로 1.75(16MB)와
+1.75C(32MB)를 판별하고, 기존 한글판 저장 데이터는 사용자 선택에 따라
+백업·복원합니다.
 
-### Eggs & who you get (spawn odds)
-- **First ever pet:** you pick a starter — **Bulbasaur / Charmander / Squirtle**.
-- Hatch the egg: tap it **3×** (or wait — it hatches on its own).
-- Every later egg rolls a **rarity tier** (over the ~79 base forms that come from eggs):
+## 현행 산책 규칙
 
-| Tier | Base chance | After a proper goodbye | # species |
-|---|---|---|---|
-| ✨ Legendary | ~3 %\* | ~10 % | 5 |
-| 🔵 Rare | ~27 % | ~45 % | 27 |
-| ⚪ Common | the rest | the rest | 47 |
+- 산책 시작 시 체력이 8 줄어듭니다. 네 능력치가 모두 25 이상이고 체력이
+  33 이상이며, 해결하지 않은 케어 호출이 없을 때만 시작할 수 있습니다.
+- 산책 중에는 배부름·기분·체력·청결이 감소하지 않지만 나이와 레벨 시간은
+  계속 흐릅니다.
+- 사용자가 직접 종료하거나 1,000보를 채우면 끝납니다. 어느 쪽도 충족하지
+  않아도 시작 후 20분이 지나면 당시 걸음 수로 결과를 계산해 자동 종료합니다.
+- 슬립 중에도 걸음 수와 시작 시각을 보존합니다. 1,000보 또는 20분에
+  도달하면 화면과 오디오를 깨우고 완료 알림 뒤 결과 화면을 표시합니다.
+- 보상은 150·300·600·1,000보 구간으로 계산하며, 150보 미만은 보상이
+  없습니다. 시작 비용 외에 결과 화면에서 체력이나 배부름을 다시 차감하지
+  않습니다.
 
-  \* Legendaries only start appearing once you've **registered ≥ 25** Pokémon.
-- A daily **streak** and high **bond** push rare/legendary odds higher.
-- A clean **goodbye blesses** the next egg; a **run-away curses** it (forces Common).
-- Within a tier it favors species whose **evolution line you haven't finished** (so
-  all 151 are completable).
-- **Shiny:** base **1 / 48** (→ **1 / 24** right after a goodbye), improved by
-  streak/bond down to a best of **1 / 8**. Tracked separately in the dex.
-- Every hatch rolls unique **genes** (90–110 % per stat) — no two are identical.
+## 플래셔가 내려받는 항목
 
-### Evolution
-- Triggers when **level ≥ its evolution level** (16 for most base forms; ~30 for
-  stone-style, ~40 for trade-style) **and every stat ≥ 40** at that moment.
-- **Never automatic** — a button appears and **you tap to witness it** (with a
-  flicker between the old and new form). Each **slip-up delays it by 1 level**.
-- You can **decline** ("keep form"); it re-offers at the next level.
-- *Eevee* branches toward whichever evolution you're still missing.
+- 1세대 151종의 일반·이로치 스프라이트 원본과 제작자 크레딧
+- Espressif가 배포하는 Windows용 esptool
+- mklittlefs 제작자가 배포하는 Windows용 mklittlefs
 
-### The three endings (you choose & witness each — none auto-fire)
-- 💛 **Farewell** — when it's a **final form** that has lived **3 days**. A button
-  appears; triggering it **blesses your next egg**. You can **postpone** ("stay
-  together", re-offered in a day). The good ending.
-- 💔 **Run-away** — if you let **all four stats sit at 0 for a full hour**. A single
-  act of care cancels it. It **curses the next egg** (forces Common). The sad ending.
-- 👋 **Release** — long-press the creature to let it go on your terms (neutral).
+도구 압축 파일은 코드에 고정된 SHA-256 값으로 검증합니다. 스프라이트는
+[PMDCollab/SpriteCollab](https://github.com/PMDCollab/SpriteCollab)에서
+필요한 동작만 내려받고, 투명 여백 제거와 팔레트 최적화를 거쳐 기기용 TPK3로
+변환합니다. 플래셔가 다운로드한다는 사실은 별도의 이용 권리를 부여하지
+않습니다.
 
-After any ending, a **new egg** appears.
+SpriteCollab은 해당 프로젝트가 게시한
+[CC BY-NC 4.0](https://github.com/PMDCollab/SpriteCollab/blob/master/LICENSE.md)
+조건과 제작자 표기를 확인해야 합니다. 플래셔는 `credit_names.txt`,
+`tracker.json`, 라이선스 사본을 캐시에 함께 보존합니다. 상업적 사용을
+전제로 한 도구가 아닙니다.
 
-### Bonds, streaks, medals, Pokédex
-- **Streak** (player-wide, survives across pets): first care each real day; milestones
-  at **3 / 7 / 30 / 100** days; skipping a day breaks it.
-- **Bond** (per pet, resets on hatch): grows with affection (**cap +8/day**), cools on
-  neglect. Both streak & bond improve egg/shiny odds.
-- **8 medals** (Lv10/25/50, favorite berry found, 7-day streak, max bond, final form,
-  "fit" = weight 0 & no slip-ups), per-pet + a global counter.
-- **Pokédex:** raising a species registers it; **151 + shinies** to complete.
+## 파일과 캐시 위치
 
-### Battle stats
-ATK / DEF / SPD = real **Gen-1 base** × genes + level + training (STRENGTH ← bag,
-SPEED ← minigame, DEFENSE ← 12 h of unbroken good care). *(Battles: on the roadmap.)*
+플래셔가 다운로드하거나 생성한 모든 파일은 사용자가 확인하기 쉽도록
+실행 파일 옆의 `TamaPoke-Flasher-Data` 폴더에만 모읍니다.
 
-## Hardware
-
-- Board: [ESP32-S3-Touch-AMOLED-1.75](https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-1.75)
-  — get the **Standard** (no case) or **-G** (GPS, also fits) version; **not the "-B"**
-  (ships with a protective case that won't fit). The separate "1.75**C**" is a different board.
-- Round 466×466 AMOLED, **CO5300** driver (QSPI, 80 MHz)
-- Capacitive touch **CST9217** (I2C, address 0x5A)
-- **AXP2101** (power management + battery + PWR button), **PCF85063** (RTC),
-  microSD slot, **ES8311** audio codec (→ amplifier → external speaker on the
-  MX1.25 connector)
-- Pins taken from the [official Waveshare repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.75) (see `pin_config.h`)
-
-## Libraries (Arduino IDE / arduino-cli)
-
-| Library | Author | Use |
-|---|---|---|
-| GFX Library for Arduino (`Arduino_GFX`) | moononournation | CO5300 over QSPI + framebuffer in PSRAM |
-| SensorLib | Lewis He | CST9217 touch + PCF85063 RTC |
-| XPowersLib | Lewis He | AXP2101 PMU (battery, brightness, PWR button) |
-| ESP_I2S (bundled in the ESP32 core) | Espressif | I2S to the ES8311 codec |
-
-## IDE setup / build
-
-- Board: **ESP32S3 Dev Module** · Flash **16MB** · PSRAM **OPI PSRAM**
-  (required: the 466×466×16-bit framebuffer ≈ 434 KB lives in PSRAM) ·
-  Partition Scheme with FAT (e.g. `16M Flash (3MB APP/9MB FATFS)`) ·
-  USB CDC On Boot **Enabled**
-
-```bash
-FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
-arduino-cli compile --fqbn "$FQBN" .
-arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" .
+```text
+TamaPoke-Flasher-Data\
+├─ Cache\       다운로드한 스프라이트, 크레딧, 변환 자산, 완성 펌웨어
+├─ Payload\     다운로드한 설치 도구와 자산 없는 기본 프로그램
+├─ Logs\        설치 로그
+└─ Backups\     사용자가 선택한 저장 데이터 백업
 ```
 
-### Easiest install: the web installer
+같은 자산과 기종 조합은 내용 해시를 확인해 캐시를 재사용합니다. 다른 자산을
+적용하려면 ZIP 내용을 바꾼 뒤 플래셔의 `새로고침`을 누르면 됩니다. 모든
+캐시를 지우려면 플래셔를 종료한 뒤 `TamaPoke-Flasher-Data` 폴더를 삭제하면
+됩니다. 사용자 자산은 플래셔가 외부 서버에 업로드하지 않습니다.
 
-`web/index.html` flashes the firmware (ESP Web Tools) and pushes the sprites to
-the SD over Web Serial, no Arduino needed. Serve it over HTTPS or `localhost`
-(secure context) and open it in **Chrome/Edge**. See [`web/README.md`](web/README.md).
+## 개발자 빌드
 
-### Generate and load the sprites yourself
+개발 PC에는 다음 환경이 필요합니다.
 
-All sprites come from **[PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab)**
-(CC BY-NC). You can regenerate the whole set and load it onto your board with the
-pipeline below — the firmware accepts files over USB (PUT protocol with per-block
-ACK), so you don't have to remove the card (it formats the SD to FAT if needed).
+- Arduino CLI
+- ESP32 Arduino Core 3.3.11
+- .NET 10 SDK
+- GFX Library for Arduino 1.6.7
+- SensorLib 0.4.1
+- XPowersLib 0.3.3
 
-```bash
-python3 tools/pack_pmd.py       # fetch + pack PMD sprites: the 151 + shiny -> tools/sdcard/mons/p[s]NNN.bin
-python3 tools/make_thumbs.py    # Pokédex thumbnails (from the PMD sprites) -> thumbs.bin
-python3 tools/send_sd.py        # send tools/sdcard/mons/* to the board's SD over USB
+PowerShell에서 실행합니다.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Build-Public.ps1
 ```
 
-To make the **one-click web-installer bundle** instead of sending over USB:
+스크립트는 추가 자산이 없는 1.75/1.75C 기본 프로그램을 만들고, 그 기본
+프로그램만 포함한 단일 Windows 플래셔를 게시합니다. 사용자 자산,
+SpriteCollab 스프라이트, LittleFS 및 최종 전체 펌웨어는 사용자의 PC에서
+플래셔 실행 시 생성됩니다.
 
-```bash
-python3 tools/pack_bundle.py    # bundle tools/sdcard/mons/* into web/sprites.pak
-```
+## 권리와 라이선스
 
-Then load it from the web installer's **"Load sprites"** button (or `send_sd.py`
-above). `pack_pmd.py` also takes individual dex numbers, e.g. `pack_pmd.py 7 25`.
-(~40 MB total, all PMD. Versioned under `tools/sdcard/`.)
+본 프로젝트는 비공식·비상업 팬 프로젝트이며 The Pokémon Company,
+Nintendo, Creatures, GAME FREAK 및 Bandai와 제휴하거나 승인받지 않았습니다.
+관련 이름, 캐릭터, 디자인, 상표 및 기타 권리는 각 원권리자에게 있습니다.
 
-## How to play
+`LICENSE`의 MIT 조건은 원본 프로젝트 코드와 이 저장소의 코드 수정분에만
+적용됩니다. 포켓몬 관련 명칭·데이터, 다운로드한 스프라이트, 사용자가 넣은
+이미지·음원 및 제3자 라이브러리에는 각 권리와 라이선스가 별도로 적용됩니다.
+자세한 범위는 [법적·배포 구조 안내](docs/LEGAL.md), [크레딧](CREDITS.md),
+[제3자 고지](THIRD_PARTY_NOTICES.md)를 확인하세요.
 
-On first run you **choose a starter** (Bulbasaur / Charmander / Squirtle). After
-that you start with an **egg**. Tap it 3 times or wait and it hatches. From then
-on, care for your companion:
+이 구조는 권리 없는 자산을 저장소와 플래셔에 직접 포함하지 않도록 설계한
+것이지, 특정 사용에 대한 법률적 보증이나 권리자의 승인을 뜻하지 않습니다.
+사용자와 재배포자는 자신이 제공하거나 배포하는 자료에 필요한 권리를 직접
+확인해야 합니다.
 
-**Four stats** that decay: **FOOD**, **JOY**, **ENE** (energy), **HYG** (hygiene).
-If one bottoms out it counts as a *slip-up*.
-
-**Buttons (bottom arc, icons):**
-- 🍎 **Feed** → food menu: 3 berries (each species has a hidden favourite that
-  gives a bonus) and a candy (+happiness but it fattens; weight makes it sluggish).
-- ⚽ **Play** → the pokeball minigame (trains SPEED).
-- 🌙 **Light** → sleep/wake (recovers energy, dims the screen). While asleep,
-  needs decay much slower (rest).
-- 🫧 **Bath** → a foam scene that cleans up the poops.
-
-**Touch gestures:**
-- Tap the creature = pet it (+happiness, bond).
-- Horizontal swipe = open the **Pokédex / gallery**.
-- Vertical swipe up = open the **stat card** (4 pages: Profile / Battle / Medals /
-  Progress; swipe between them; tap the name on Profile to rename; on Battle the
-  "Train strength" button opens the bag).
-- Swipe down = **set the clock** and pick the **language** + sound on/off.
-- Long press (3 s) on the creature = **release** dialog.
-
-**Physical PWR button:** short = screen on/off · long (4 s) = full power-off
-(the RTC stays alive, so time passes even while it's off).
-
-## Decisions: you choose, and you watch
-
-The three life-cycle endings and evolution **don't happen on their own** — when
-the conditions are met a button appears and you tap it (so you're present to
-witness it), each opening a two-option dialog:
-
-- **Evolution** (red button): *Evolve* (epic animation: halo, rays, sparkles and
-  a **flicker between the old and new form**) or *Keep form* (re-offered next level).
-- **Farewell** (gold button, final form + 3 days): *Say goodbye* (warm farewell,
-  rising hearts → new egg) or *Stay together* (keep your companion; re-offered in
-  a day). Tension: a maxed-out friend vs. completing the Pokédex.
-- **Runaway** (dark button, total neglect for 1 h): a somber "feels abandoned"
-  ending in the rain — caring for the creature cancels it.
-
-## Sprites: PMD SpriteCollab everywhere
-
-- **PMD SpriteCollab** (everything — main screen, stat card, minigame **and the
-  Pokédex grid + detail view**): behaviour sprites — `tools/pack_pmd.py` packs
-  actions (Idle, Walk L/R, Sleep, Eat, Hurt, Attack, Pose, Nod, DeepBreath) into
-  the multi-action **TPK2** format (`/mons/pNNN.bin`). The engine in `TamaPoke.ino`
-  makes the creature wander, gesture, curl up to sleep, chew and wince. Anchored by
-  the feet (lowest content row), not the canvas. The Pokédex thumbnails
-  (`thumbs.bin`, TPTH) are derived from these by `tools/make_thumbs.py`.
-- **In-house workshop** (`tools/sprites.py`): 9 primitive-drawn sprites as a
-  no-SD fallback + the UI icons. Generates `species.h`. Preview in
-  `tools/sheet.png`, emit with `python3 tools/sprites.py emit`.
-
-`sdmon.h/.cpp` loads the PMD sprites into PSRAM (`PmdMon` for TPK2) plus the
-thumbnails (`SdThumbs`). `SdMon` (TPK1) remains as a dormant legacy fallback only.
-
-## Pokédex and species data
-
-`tools/dex_data.py` is the **single source**: name, slug, type (accent colour +
-background biome), evolution line with gen-1 levels, rarities and starters.
-`tools/dex_stats.py` has the real base stats (from PokéAPI). `tools/gen_names.py`
-pulls the **official localized names** from PokéAPI into `tools/dex_names.py`
-(only French and German differ in gen 1; Spanish, Italian and Portuguese use the
-English ones). `gen_dex.py` emits `dex.h` (the `DEX_TBL[152]` table plus the
-per-language name tables and the `dexName()` accessor). The pet's identity is its
-Pokédex number (persisted in NVS).
-
-- **Evolution** gen-1 style (levels 16/36/…; stones ≈30, trade ≈40; Eevee
-  branches to whichever evolution you're missing). Each slip-up delays it 1
-  level; it won't evolve with any stat < 40 or while asleep.
-
-## Battle stats and training
-
-Each creature has ATK/DEF/SPD = real gen-1 base × **genes** (90–110 %, rolled at
-hatch) + level + **training**:
-- SPEED ← the minigame
-- DEFENSE ← sustained good care (12 h with no slip-ups)
-- STRENGTH ← the training bag (whacking)
-
-Shown on the Battle page of the stat card. The (hidden) weight goes up with candy
-and burns off with training.
-
-## Retention: streak, bond, medals, name
-
-- **Streak** (the player's, persists across creatures): the first care of each
-  real day advances the streak; 3/7/30/100 milestones are celebrated; skipping a
-  day breaks it. Flame badge on the main screen.
-- **Bond** (the creature's): rises slowly with care and petting, drops with slip-ups.
-- **Medals** for the individual (level, berry, streak, bond, final form, fit) +
-  a global counter. Medals page of the stat card.
-- **Name**: touch keyboard; the nickname rules the header and the card.
-
-High streak and bond **improve the egg roll** (rarity and shiny): caring well
-always pays off.
-
-## Life cycle, eggs by rarity, languages
-
-The life cycle lasts **3 days** of play. Three endings (all leave a new egg):
-**farewell** (final form + 3 days), **release** (long press), **runaway** (all 4
-bars at zero for 1 h). Each bred species is recorded in the **bred Pokédex**
-(normal and shiny separately).
-
-The egg rolls rarity over the ~79 base forms (47 common / 27 rare / 5 legendary),
-**biased towards the lines you're missing** (all 151 are completable), blessed by
-a farewell and punished by a runaway. Legendaries only with 25+ registered.
-**Shiny** 1/48 (better with streak/bond/farewell).
-
-**Languages:** the UI ships in 6 languages — English (default), Spanish, French,
-German, Italian, Portuguese — switchable from the settings screen (swipe down).
-**Pokémon names are localized too**: French and German show the official names
-(Bulbizarre, Bisasam...); the other languages use the English ones, which is what
-those regions officially use for gen 1.
-
-## Backgrounds: biome + real time
-
-The idle screen paints the sky from the **RTC's real time** (dawn / day / dusk /
-night with moon and stars) and the ground from the **type's biome** (meadow,
-beach, forest, volcano, mountain, snow). Sleeping forces night.
-
-## Layout
-
-- `TamaPoke.ino` — init, game loop, render of every screen, gestures, serial console, audio
-- `pet.h` / `pet.cpp` — pet state and logic (stats, evolution, life cycle, streak/bond/medals, NVS)
-- `sdmon.h` / `sdmon.cpp` — TPK1 (animated) and TPK2 (PMD) sprites + thumbnails, and file reception over USB (PUT/LS)
-- `rtcbat.h` / `rtcbat.cpp` — PCF85063 RTC + AXP2101 PMU (battery, brightness, PWR button)
-- `audio.h` / `audio.cpp` — ES8311 + I2S + Game-Boy-style tone synth (non-blocking task)
-- `i18n.h` / `i18n.cpp` — the 6-language string tables
-- `dex.h` — GENERATED (`gen_dex.py`): the 151 table
-- `species.h` — GENERATED (`sprites.py`): fallback sprites, UI icons, colours
-- `pin_config.h` — the board's official pins
-- `tools/` — pipeline: `dex_data.py` (data), `dex_stats.py`, `dex_names.py` +
-  `gen_names.py` (localized names), `gen_dex.py`,
-  `sprites.py` (workshop), `pack_pmd.py` / `make_thumbs.py`
-  (packers), `pack_bundle.py` (web bundle), `send_sd.py` (SD upload), `touch_log.py`
-- `tools/sdcard/mons/` — the generated .bin files (animated, shiny, PMD, thumbnails)
-- `web/` — the browser installer (ESP Web Tools + Web Serial sprite loader)
-
-## Serial console (115200, debug)
-
-`STATS` (full state) · `SPEC <dex>` (change species) · `LVL <n>` · `HATCH` ·
-`SHINY` · `NICK <x>` · `BYE` / `RUN` (farewell / runaway) · `ABANDON` (force the
-runaway-ready state) · `WIPE` (factory reset → new game) · `BEEP` (audio test) ·
-`REG` (Pokédex) · `EGGS` (simulate 20 eggs) · `GAL` (gallery) · `CAREDAY` ·
-`TIME <epoch>` / `RTCSET <epoch>` · `HEALTH` (uptime + heap for the soak test) ·
-`LS` / `PUT` (SD files).
-
-To test fast: lower `PET_TICK_MS`, `MINUTES_PER_LEVEL` and `FAREWELL_AGE_MIN` in `pet.h`.
-
-## Roadmap
-
-- **Wild encounters / battle** — designed (see project memory): resolution by
-  ATK/DEF/SPD with PMD Attack/Hurt animations, trainer rank as endgame. Style
-  still to pick (auto / timing / turn-based).
-- **Soak test** 24–48 h (instrumentation ready: `HEALTH` command/heartbeat).
-
-*(Done: 3D-printed case [published on MakerWorld](https://makerworld.com/es/models/2937822-tamapoke-a-pokemon-pokeball-tamagotchi); repo public with the browser installer + one-click sprite bundle.)*
-
-## Community forks
-
-- **[TamaPoke — Expanded](https://github.com/ShadowEnemyx/TamaPoke/tree/tamapoke-expanded-update)** by **ShadowEnemy** — a substantial community fork (different author/branch): a full **type-matchup battle system**, all **151 + shinies** with a **Pokédex / collection box** and daily goals, **6 UI languages**, **ES8311 sound**, starter choice and a one-click web installer. Worth a look. 🎮
-- **[TamaPoke](https://github.com/DylanPDao/TamaPoke)** by **DylanPDao** — another substantial fork: **gym battles** and **LAN battles** between two devices, **movesets**, a **party + box** system, an **EV/IV** stat system, and coverage extended **up to Gen 3 (386)**. Keeps the PMD sprite pipeline. 🏆
-
-## Credits
-
-All sprites: [PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab)
-(community, CC BY-NC). Base stats: [PokéAPI](https://pokeapi.co). Pokémon is a ™ of
-Nintendo / Game Freak / The Pokémon Company. Non-commercial, personal-use project.
-Full list in [`CREDITS.md`](CREDITS.md).
-
-## License
-
-- **Source code** (firmware + tooling): **[MIT](LICENSE)**.
-- **Sprites & names**: © Nintendo / Game Freak / The Pokémon Company; pixel art
-  from [PMD SpriteCollab](https://github.com/PMDCollab/SpriteCollab) (CC BY-NC 4.0).
-  **Non-commercial use only.**
-- **3D-printed case**: remix of *"Pokeball"* by **yoyothechicken**
-  ([MakerWorld #839922](https://makerworld.com/es/models/839922-pokeball)),
-  licensed **CC BY-NC-SA**, and shared here under the same terms.
-
-This is an unofficial fan project, not affiliated with or endorsed by Nintendo.
+- 공개 프로젝트: <https://github.com/ccs21/TamaPoke_Piggy_Kor>
+- 원본 프로젝트: <https://github.com/socquique/TamaPoke>
+- 게시자: ccs21
+- 문의: ccs2121@naver.com

@@ -1,0 +1,120 @@
+#pragma once
+#include <Arduino.h>
+
+// Legacy language values are kept for save compatibility. The Korean build
+// always returns Korean strings and ignores language changes.
+enum Lang : uint8_t { LANG_ES = 0, LANG_EN, LANG_FR, LANG_DE, LANG_IT, LANG_PT, LANG_COUNT };
+#define LANG_DEFAULT LANG_EN  // idioma por defecto: ingles
+
+extern Lang gLang;  // idioma activo (definido en i18n.cpp)
+
+// IDs de cadena. El orden debe coincidir con la tabla STRINGS de i18n.cpp.
+enum StrId : uint16_t {
+  // estado del bicho (statusMsg)
+  S_EVOLVING, S_EATING, S_LIKES, S_HUNGRY, S_NEEDS_BATH,
+  S_EXHAUSTED, S_SAD, S_CHUBBY, S_IS_SHINY, S_HAPPY,
+  // ceremonias de despedida
+  S_FAREWELL, S_RUNAWAY, S_GOODBYE,
+  // huevo
+  S_EGG_HDR, S_EGG_LEGEND, S_EGG_RARE, S_EGG_TOUCH, S_EGG_MOVES, S_EGG_ALMOST,
+  // formatos compartidos
+  S_POKEDEX_FMT,   // "POKEDEX %u/151"
+  S_NAME_FMT,      // "%s%s Nv.%u"
+  // dialogo soltar
+  S_RELEASE_FMT, S_YES, S_NO,
+  // minijuego y saco
+  S_HITS_FMT, S_STR_GAIN_FMT, S_NEW_RECORD, S_RECORD_FMT, S_HIT_FAST,
+  S_SCORE_FMT, S_GREAT_JOY, S_PLUS_JOY,
+  // reloj / ajustes
+  S_SET_TIME, S_HOUR, S_MIN, S_CLOCK_CANCEL, S_LANG_LABEL,
+  // celebracion
+  S_MEDAL_BANNER, S_GREAT, S_STREAK_DAYS_FMT,
+  // ficha: perfil
+  S_STREAK_FMT, S_VIN, S_BERRY_UNK, S_BERRY_RED, S_BERRY_BLUE, S_BERRY_GREEN,
+  S_INFO_FMT, S_RENAME_HINT,
+  // ficha: combate
+  S_BATTLE, S_STAT_ATK, S_STAT_DEF, S_STAT_SPE, S_STAT_WGT, S_TRAIN_STR,
+  // ficha: medallas
+  S_MEDALS_FMT, S_BACK,
+  // teclado y galeria
+  S_NAME, S_DETAIL_BACK,
+  // barras
+  S_BAR_FOOD, S_BAR_JOY, S_BAR_ENE, S_BAR_HYG,
+  // marcador en vivo del minijuego
+  S_REC_FMT,
+  // ficha: pagina de progreso
+  S_PROGRESS, S_LVL_FMT, S_NEXT_LVL_FMT, S_EVO_LABEL, S_FINAL_FORM,
+  S_EVO_READY, S_EVO_BLOCKED, S_EVO_IN_FMT, S_MISTAKES_FMT,
+  // modo de sonido (ajustes)
+  S_SND_FULL, S_SND_MED, S_SND_LOW, S_SND_OFF, S_PSAVE_ON, S_PSAVE_OFF,
+  S_EVO_TAP,        // texto del boton de evolucion
+  S_FAREWELL_BTN,   // texto del boton de despedida (lleva el nombre: "%s ...")
+  S_RUNAWAY_BTN,    // texto del boton de escapada por abandono (final triste)
+  // dialogos de decision (evolucionar/mantener, despedirse/quedaros)
+  S_EVO_Q, S_EVO_KEEP, S_FAR_Q, S_FAR_GO, S_FAR_STAY,
+  S_CHOOSE_STARTER,  // titulo de la eleccion del inicial (primera vez)
+  S_NO_SPRITES, S_LOAD_SPRITES,  // aviso cuando falta el sprite en la SD
+  S_WILD_BATTLE, S_FIGHT, S_RUN_BATTLE, S_WIN, S_LOSS, S_ROUNDS_FMT, S_DAMAGE_FMT, S_OK,
+  S_ATTACK, S_DODGE, S_REST, S_HIT_FMT, S_MISSED, S_DODGED, S_RESTED_FMT, S_RAN,
+  S_WL_FMT, S_BSTREAK_FMT, S_BBEST_FMT, S_ATK_GAIN_FMT, S_DEF_GAIN_FMT, S_SPD_GAIN_FMT, S_HYG_GAIN_FMT,
+  S_COUNTER_READY, S_NO_REST, S_WILD_Q, S_LATER,
+  S_QUICK_ATTACK, S_HEAVY_ATTACK,
+  S_ENEMY_DODGED, S_GUARD,
+  S_GAME_BALL, S_GAME_CATCH, S_GAME_MEMO, S_GAME_CLEAN, S_GAME_TYPE, S_GAME_FRIEND, S_FRIEND_LOCKED,
+  S_CATCH_TITLE, S_CLEAN_TITLE, S_TYPE_TITLE, S_ROUND_FMT,
+  S_EVENT_FOUND, S_EVENT_PET, S_EVENT_LUCKY,
+  S_PERSONALITY, S_PERS_BALANCED, S_PERS_PLAYFUL, S_PERS_BRAVE, S_PERS_CALM, S_PERS_LAZY,
+  S_PERS_BALANCED_HINT, S_PERS_PLAYFUL_HINT, S_PERS_BRAVE_HINT, S_PERS_CALM_HINT, S_PERS_LAZY_HINT,
+  S_RECORDS, S_AGE_DAYS_FMT,
+  S_DAILY, S_DONE, S_REWARD, S_GOAL_CARE, S_GOAL_PLAY, S_GOAL_BATTLE, S_GOAL_CATCH, S_GOAL_MEMO,
+  S_CATCH_WILD, S_LEAVE_WILD, S_CAUGHT_OK, S_ESCAPED, S_CAUGHT_MARK, S_RAISED_MARK,
+  S_FILTER_ALL,
+  S_EFFECTIVE, S_NOT_EFFECTIVE,
+  S_BOX, S_NO_CATCHES, S_CAUGHT_COUNT_FMT,
+  S_HAPPY_FB, S_BOND_GAIN, S_WAIT,
+  S_MORNING, S_DAY, S_EVENING, S_NIGHT,
+  S_DEX_GOAL_FMT, S_DEX_REWARD, S_KNOWN_FMT,
+  S_SORT_DEX, S_SORT_TYPE, S_SORT_RAISED, S_PAGE_FMT,
+  S_CLOSE_CHANCE,
+  S_EXPEDITION, S_EXP_15, S_EXP_30, S_EXP_60, S_EXP_IN_FMT, S_EXP_READY,
+  S_EXP_CLAIM, S_INVENTORY, S_INV_FULL, S_NEED_ENE_FMT,
+  S_ITEM_SNACK, S_ITEM_ENERGY, S_ITEM_CARE, S_ITEM_TRAIN, S_FOUND_ITEM_FMT,
+  S_TRAIN_ATK, S_TRAIN_DEF, S_TRAIN_SPE, S_ITEM_MAXED,
+  S_COLLECTION, S_FRAME_FMT, S_NEW_FRAME,
+  S_RANK_TRAINER, S_RANK_SCOUT, S_RANK_COLLECTOR, S_RANK_RESEARCHER, S_RANK_MASTER, S_RANK_COMPLETE,
+  S_MEMO_WATCH, S_MEMO_TURN_FMT, S_MEMO_WRONG,
+  // 데이터 초기화
+  S_RESET_DATA, S_RESET_WARN1, S_RESET_Q1, S_RESET_WARN2, S_RESET_Q2,
+  S_RESET_CANCEL, S_RESET_CONFIRM, S_RESET_HOLD, S_RESET_HOLD_HINT, S_RESETTING,
+  // 수면/베이비시터
+  S_SLEEP_ACTION, S_BABYSITTER, S_SITTER_DESC, S_SITTER_ACTIVE,
+  S_RETURN, S_SITTER_UNAVAILABLE,
+  // 산책
+  S_WALK, S_WALK_START, S_STEPS_FMT, S_WALK_TIER_FMT,
+  S_WALK_REWARD, S_WALK_NO_REWARD, S_WALK_SENSOR_FAIL,
+  // 근거리 통신
+  S_COMMUNICATION, S_COMM_BATTLE, S_COMM_PAIRING, S_COMM_PAIR_LOCKED,
+  S_COMM_HOST, S_COMM_JOIN, S_COMM_WAIT, S_COMM_CONNECTING,
+  S_COMM_SUCCESS, S_COMM_FAILED,
+  S_LINKED_MARK, S_LINK_BATTLE, S_COMM_CHOOSE, S_COMM_WAIT_TURN,
+  // 개편된 배틀/기술 재학습
+  S_BASIC_ATTACK, S_RECOVER, S_FORFEIT, S_SKILL_LOCKED,
+  S_NO_USES, S_RUN_FAILED, S_MOVE1, S_MOVE2, S_MOVE_DISC,
+  S_RELEARN_MOVE, S_LEARN_MOVE, S_KEEP_MOVE, S_RELEARN_Q, S_RELEARNED,
+  S_OPPONENT_FORFEITED,
+  STR_COUNT
+};
+
+const char *T(StrId id);       // texto en el idioma activo
+const char *dexName(int16_t dex); // nombre de Pokemon en el idioma activo
+const char *medalName(int i);  // banner de medalla (MED_COUNT)
+const char *medalLabel(int i); // etiqueta corta de medalla
+const char *medalDesc(int i);  // descripcion larga de medalla
+const char *typeNameKo(uint8_t type);
+const char *helpWordKo();
+const char *helpOkKo();
+const char *helpTitleKo(uint8_t page);
+const char *helpLineKo(uint8_t page, uint8_t line);
+
+void loadLang();             // lee el idioma de NVS (llamar en setup)
+void setLang(Lang l);        // cambia y persiste el idioma
