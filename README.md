@@ -151,4 +151,3 @@ Nintendo, Creatures, GAME FREAK 및 Bandai와 제휴하거나 승인받지 않�
 - 공개 프로젝트: <https://github.com/ccs21/TamaPoke_Piggy_Kor>
 - 원본 프로젝트: <https://github.com/socquique/TamaPoke>
 - 게시자: ccs21
-- 문의: ccs2121@naver.com
