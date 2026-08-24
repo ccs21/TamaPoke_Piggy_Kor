@@ -19,11 +19,10 @@ Waveshare ESP32-S3-Touch-AMOLED-1.75 및 1.75C용 비공식·비상업 한글판
 ## 프로젝트 계보
 
 - 원본: [socquique/TamaPoke](https://github.com/socquique/TamaPoke)
-- 초기 개발 기반: [ShadowEnemyx/TamaPoke의 tamapoke-expanded-update 브랜치](https://github.com/ShadowEnemyx/TamaPoke/tree/tamapoke-expanded-update)
 - 한글판 및 현행 기능 수정: ccs21
 
-개발은 위 확장 브랜치에서 시작했지만 이후 펌웨어, UI, 전력 관리, 통신,
-미니게임, Windows 플래셔와 자산 처리 방식이 광범위하게 변경되었습니다.
+원본 프로젝트를 바탕으로 펌웨어, UI, 전력 관리, 통신, 미니게임,
+Windows 플래셔와 자산 처리 방식을 광범위하게 변경했습니다.
 원저작자의 MIT 고지와 프로젝트 계보는 계속 유지합니다.
 
 ## 공개 범위
