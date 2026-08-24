@@ -1109,27 +1109,43 @@ void enterDeviceSleep(bool buttonStillHeld) {
   bool wakeForPwr = false;
   bool wakePwrNeedsRelease = false;
   uint64_t nextCareCheckUs = sleepStartedUs + CARE_CHECK_US;
+  uint64_t lastPwrPollUs = sleepStartedUs;
+  uint64_t lastWalkPollUs = sleepStartedUs;
   for (;;) {
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-    // PWR IRQ is latched by the AXP2101, so a one-second poll halves CPU/I2C
-    // wakeups without losing a short press. The same tick checks the QMI's
-    // autonomous counter when a walk is in progress.
-    esp_sleep_enable_timer_wakeup(1000000ULL);
+    const bool walkingSleep = walkOpen && !walkFinished && walkSensorActive();
+    // The QMI hardware pedometer rejects many gentle hand-held movements as
+    // non-walking vibration. During a walk, wake briefly at the same 40 Hz
+    // cadence as the active software detector so sleep does not lose steps.
+    // The AMOLED, touch, audio and storage remain off. Ordinary device sleep
+    // keeps the low-power one-second poll.
+    esp_sleep_enable_timer_wakeup(walkingSleep ? 25000ULL : 1000000ULL);
     esp_light_sleep_start();
 
-    uint8_t power = pwrEvents();
-    if (waitForRelease) {
-      if (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) waitForRelease = false;
-    } else if (power & (PWR_EVENT_PRESS | PWR_EVENT_SHORT)) {
-      wakeForPwr = true;
-      wakePwrNeedsRelease = (power & PWR_EVENT_PRESS) != 0 &&
-                            (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) == 0;
-      break;
+    const uint64_t monotonicNowUs = (uint64_t)esp_timer_get_time();
+    if (walkingSleep) {
+      walkSensorUpdate((uint32_t)(monotonicNowUs / 1000ULL));
     }
 
-    const uint64_t monotonicNowUs = (uint64_t)esp_timer_get_time();
+    // AXP2101 button IRQs are latched, so polling them once per second still
+    // preserves a short press while avoiding 40 extra PMU I2C reads per second.
+    if (!walkingSleep || monotonicNowUs - lastPwrPollUs >= 1000000ULL) {
+      lastPwrPollUs = monotonicNowUs;
+      uint8_t power = pwrEvents();
+      if (waitForRelease) {
+        if (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) waitForRelease = false;
+      } else if (power & (PWR_EVENT_PRESS | PWR_EVENT_SHORT)) {
+        wakeForPwr = true;
+        wakePwrNeedsRelease = (power & PWR_EVENT_PRESS) != 0 &&
+                              (power & (PWR_EVENT_RELEASE | PWR_EVENT_SHORT)) == 0;
+        break;
+      }
+    }
+
     if (walkOpen && !walkFinished) {
-      if (walkSensorActive()) {
+      if (walkSensorActive() &&
+          monotonicNowUs - lastWalkPollUs >= 250000ULL) {
+        lastWalkPollUs = monotonicNowUs;
         const uint32_t measured = walkSensorSteps();
         walkSteps = measured > 65535UL ? 65535 : (uint16_t)measured;
         saveWalkCheckpoint(false);
