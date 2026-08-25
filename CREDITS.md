@@ -40,13 +40,15 @@ implied.
 
 See `THIRD_PARTY_NOTICES.md` for license details.
 
-## User-supplied assets
+## Sample and user-supplied assets
 
-Loading, capture, Snorlax and Diglett images and all additional scene/effect
-audio are not included. Each user supplies those files locally in
-`Additional_assets.zip`. The flasher processes them only on that user's PC and
-does not upload them. Users must provide only files they created themselves or
-for which they hold the rights needed for software embedding, editing and use.
+The bundled `sample_Additional_assets.zip` contains unofficial placeholder
+images created by ccs21 and zero-byte audio markers. It contains no actual
+additional audio. Users may copy the sample to `Additional_assets.zip` and
+replace its contents locally. The flasher processes those custom files only on
+that user's PC and does not upload them. Users must provide only files they
+created themselves or for which they hold the rights needed for software
+embedding, editing and use.
 
 ## Unofficial project notice
 

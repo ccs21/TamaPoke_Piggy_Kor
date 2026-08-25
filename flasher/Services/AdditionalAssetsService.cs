@@ -8,14 +8,15 @@ using NAudio.Wave;
 namespace TamaPoke.Flasher.Services;
 
 public sealed record AdditionalAssetStatus(
-    string ArchivePath, bool Exists, bool IsValid, string CompactText,
-    string? ArchiveHash, IReadOnlyList<string> Errors);
+    string ArchivePath, string? FallbackArchivePath, bool Exists, bool IsValid,
+    bool RequiresSampleSupplement, string CompactText, string? ArchiveHash,
+    IReadOnlyList<string> MissingFiles, IReadOnlyList<string> Errors);
 
 public sealed record AdditionalAssetBuildResult(string DataDirectory, string InputHash);
 
 public sealed class AdditionalAssetsService
 {
-    private const string PipelineVersion = "additional-assets-v4";
+    private const string PipelineVersion = "additional-assets-v5";
     private const int TargetRate = 16_000;
     private const int MaxEntries = 128;
     private const long MaxExpandedBytes = 256L * 1024 * 1024;
@@ -26,6 +27,8 @@ public sealed class AdditionalAssetsService
     private sealed record AudioDefinition(string Name, string Output, double StartSeconds,
         double DurationSeconds, double FadeSeconds, float Peak, bool TrimSilence = false,
         double MaximumSeconds = 0);
+    private sealed record AssetRequirement(string Folder, string Stem, string DisplayName,
+        IReadOnlyCollection<string> Extensions);
 
     private static readonly VisualDefinition[] Visuals =
     [
@@ -57,56 +60,136 @@ public sealed class AdditionalAssetsService
     ];
 
     private readonly string _cacheRoot = AppStoragePaths.Under(
-        "Cache", "additional", "4.0.0");
+        "Cache", "additional", "5.0.0");
+    private readonly string _assetDirectory;
 
-    public string ArchivePath => Path.Combine(AppContext.BaseDirectory, "Additional_assets.zip");
+    public AdditionalAssetsService(string? assetDirectory = null)
+    {
+        _assetDirectory = Path.GetFullPath(assetDirectory ?? AppContext.BaseDirectory);
+    }
+
+    public string ArchivePath => Path.Combine(_assetDirectory, "Additional_assets.zip");
+    public string SampleArchivePath => Path.Combine(_assetDirectory, "sample_Additional_assets.zip");
 
     public AdditionalAssetStatus Scan()
     {
-        if (!File.Exists(ArchivePath))
-            return new(ArchivePath, false, false,
-                "Additional_assets.zip이 없습니다. 플래셔와 같은 폴더에 넣어 주세요.", null,
-                ["Additional_assets.zip을 찾지 못했습니다."]);
+        var hasPrimary = File.Exists(ArchivePath);
+        var hasSample = File.Exists(SampleArchivePath);
+        if (!hasPrimary && !hasSample)
+            return new(ArchivePath, null, false, false, false,
+                "추가 자산 ZIP이 없습니다. 플래셔를 다시 압축 해제해 주세요.", null, [],
+                ["Additional_assets.zip 또는 sample_Additional_assets.zip을 찾지 못했습니다."]);
 
+        var selectedPath = hasPrimary ? ArchivePath : SampleArchivePath;
         var errors = new List<string>();
+        var missing = new List<AssetRequirement>();
         string? hash = null;
+        string? fallbackPath = null;
+        var requiresSampleSupplement = false;
+        var disabledAudio = 0;
         try
         {
-            using (var stream = File.OpenRead(ArchivePath))
-                hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
-            using var archive = ZipFile.OpenRead(ArchivePath);
+            var selectedHash = ComputeFileHash(selectedPath);
+            using var archive = ZipFile.OpenRead(selectedPath);
             ValidateArchiveEnvelope(archive, errors);
-            foreach (var visual in Visuals)
-                FindUniqueEntry(archive, "Visual", Path.GetFileNameWithoutExtension(visual.Name), [".png"], errors);
-            var disabledAudio = 0;
-            foreach (var audio in Audio)
+
+            foreach (var requirement in Requirements())
             {
-                var entry = FindUniqueEntry(archive, "Audio", audio.Name, [".mp3", ".wav"], errors);
-                if (entry?.Length == 0) disabledAudio++;
+                var matches = FindEntries(archive, requirement);
+                if (matches.Length == 0) missing.Add(requirement);
+                else if (matches.Length > 1)
+                    errors.Add($"중복: {requirement.DisplayName} 파일은 하나만 넣어 주세요.");
+                else if (ValidateEntryContent(matches[0], requirement) is not null)
+                    missing.Add(requirement);
             }
-            if (errors.Count == 0)
+
+            ZipArchive? sampleArchive = null;
+            try
             {
-                var suppliedAudio = Audio.Length - disabledAudio;
-                return new(ArchivePath, true, true,
-                    $"추가 이미지 {Visuals.Length}개 · 음원 {suppliedAudio}개 · 생략 {disabledAudio}개 · {hash![..12]}",
-                    hash, errors);
+                if (missing.Count > 0 && hasPrimary)
+                {
+                    if (!hasSample)
+                    {
+                        errors.AddRange(missing.Select(item => $"누락: {item.DisplayName}"));
+                    }
+                    else
+                    {
+                        fallbackPath = SampleArchivePath;
+                        sampleArchive = ZipFile.OpenRead(fallbackPath);
+                        var sampleErrors = new List<string>();
+                        ValidateArchiveEnvelope(sampleArchive, sampleErrors);
+                        errors.AddRange(sampleErrors.Select(error => $"sample_Additional_assets.zip: {error}"));
+                        foreach (var requirement in missing)
+                        {
+                            var matches = FindEntries(sampleArchive, requirement);
+                            if (matches.Length == 0)
+                                errors.Add($"샘플에도 누락: {requirement.DisplayName}");
+                            else if (matches.Length > 1)
+                                errors.Add($"샘플 중복: {requirement.DisplayName} 파일은 하나만 있어야 합니다.");
+                            else if (ValidateEntryContent(matches[0], requirement) is { } contentError)
+                                errors.Add($"샘플 손상: {requirement.DisplayName} ({contentError})");
+                        }
+                        if (errors.Count == 0)
+                        {
+                            requiresSampleSupplement = true;
+                            var sampleHash = ComputeFileHash(fallbackPath);
+                            hash = HashText($"{selectedHash}|{sampleHash}|{string.Join('|', missing.Select(item => item.DisplayName))}");
+                        }
+                    }
+                }
+                else if (missing.Count > 0)
+                {
+                    errors.AddRange(missing.Select(item => $"누락: {item.DisplayName}"));
+                }
+
+                if (errors.Count == 0)
+                {
+                    hash ??= selectedHash;
+                    foreach (var audio in Audio)
+                    {
+                        var requirement = AudioRequirement(audio);
+                        var needsSample = missing.Any(item => item.DisplayName == requirement.DisplayName);
+                        var entry = !needsSample
+                            ? FindEntries(archive, requirement).SingleOrDefault()
+                            : sampleArchive is null ? null : FindEntries(sampleArchive, requirement).SingleOrDefault();
+                        if (entry?.Length == 0) disabledAudio++;
+                    }
+                }
+            }
+            finally
+            {
+                sampleArchive?.Dispose();
             }
         }
         catch (Exception ex)
         {
             errors.Add($"ZIP을 읽을 수 없습니다: {ex.Message}");
         }
-        return new(ArchivePath, true, errors.Count == 0,
-            errors.Count == 0 ? $"추가 자산 21개 확인됨 · {hash![..12]}" : "Additional_assets.zip 구성을 확인해 주세요.",
-            hash, errors);
+
+        var valid = errors.Count == 0;
+        string compact;
+        if (!valid)
+            compact = "추가 자산 ZIP 구성을 확인해 주세요.";
+        else if (requiresSampleSupplement)
+            compact = $"Additional_assets.zip 우선 · 누락 {missing.Count}개 샘플 보충 가능 · {hash![..12]}";
+        else
+        {
+            var suppliedAudio = Audio.Length - disabledAudio;
+            var sourceName = hasPrimary ? "Additional_assets.zip" : "sample_Additional_assets.zip";
+            compact = $"{sourceName} 확인됨 · 이미지 {Visuals.Length}개 · 음원 {suppliedAudio}개 · 생략 {disabledAudio}개 · {hash![..12]}";
+        }
+        return new(selectedPath, fallbackPath, true, valid, requiresSampleSupplement,
+            compact, hash, missing.Select(item => item.DisplayName).ToArray(), errors);
     }
 
     public async Task<AdditionalAssetBuildResult> PrepareAsync(
-        AdditionalAssetStatus status, Action<string> log,
+        AdditionalAssetStatus status, bool allowSampleSupplement, Action<string> log,
         IProgress<ProgressUpdate>? progress, CancellationToken token)
     {
         if (!status.IsValid || status.ArchiveHash is null)
-            throw new InvalidOperationException("Additional_assets.zip이 없거나 구성이 올바르지 않습니다.");
+            throw new InvalidOperationException("추가 자산 ZIP이 없거나 구성이 올바르지 않습니다.");
+        if (status.RequiresSampleSupplement && !allowSampleSupplement)
+            throw new InvalidOperationException("누락된 파일을 샘플에서 보충하도록 승인하지 않았습니다.");
         var keyText = $"{PipelineVersion}|{status.ArchiveHash}";
         var inputHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(keyText))).ToLowerInvariant();
         var key = inputHash[..24];
@@ -127,56 +210,78 @@ public sealed class AdditionalAssetsService
         Directory.CreateDirectory(Path.Combine(data, "extra"));
         Directory.CreateDirectory(Path.Combine(data, "audio"));
         Directory.CreateDirectory(disabled);
-        progress?.Report(new ProgressUpdate(8, "추가 자산 압축 해제", "Additional_assets.zip을 안전하게 검사하고 캐시에 보관합니다."));
+        progress?.Report(new ProgressUpdate(8, "추가 자산 압축 해제", "추가 자산 ZIP을 안전하게 검사하고 캐시에 보관합니다."));
+        var primaryExtracted = Path.Combine(extracted, "selected");
+        var fallbackExtracted = Path.Combine(extracted, "sample");
         using (var archive = ZipFile.OpenRead(status.ArchivePath))
+        using (var fallbackArchive = status.RequiresSampleSupplement && status.FallbackArchivePath is not null
+                   ? ZipFile.OpenRead(status.FallbackArchivePath)
+                   : null)
         {
             var envelopeErrors = new List<string>();
             ValidateArchiveEnvelope(archive, envelopeErrors);
+            if (fallbackArchive is not null) ValidateArchiveEnvelope(fallbackArchive, envelopeErrors);
             if (envelopeErrors.Count != 0) throw new InvalidDataException(string.Join(Environment.NewLine, envelopeErrors));
-            await ExtractSafelyAsync(archive, extracted, token);
+            await ExtractSafelyAsync(archive, primaryExtracted, token);
+            if (fallbackArchive is not null)
+                await ExtractSafelyAsync(fallbackArchive, fallbackExtracted, token);
+
+            (ZipArchiveEntry Entry, string Root, bool FromSample) Resolve(AssetRequirement requirement)
+            {
+                var needsSample = status.MissingFiles.Contains(requirement.DisplayName, StringComparer.Ordinal);
+                var primary = needsSample ? null : FindEntries(archive, requirement).SingleOrDefault();
+                if (primary is not null) return (primary, primaryExtracted, false);
+                var sample = fallbackArchive is null
+                    ? null
+                    : FindEntries(fallbackArchive, requirement).SingleOrDefault();
+                if (sample is null) throw new InvalidDataException($"누락: {requirement.DisplayName}");
+                return (sample, fallbackExtracted, true);
+            }
 
             progress?.Report(new ProgressUpdate(11, "이미지 가공", "사용자가 준비한 이미지를 기기용 형식으로 변환합니다."));
             foreach (var visual in Visuals.Where(item => !item.CleanSnorlax))
             {
                 token.ThrowIfCancellationRequested();
-                var entry = FindUniqueEntry(archive, "Visual", Path.GetFileNameWithoutExtension(visual.Name), [".png"], null)!;
-                var source = SafeExtractedPath(extracted, entry.FullName);
+                var resolved = Resolve(VisualRequirement(visual));
+                var source = SafeExtractedPath(resolved.Root, resolved.Entry.FullName);
                 var output = Path.Combine(data, "extra", visual.Output);
                 await Task.Run(() => ConvertVisual(source, output, visual), token);
-                log($"이미지 가공: {visual.Name} -> {visual.Output}");
+                log($"이미지 가공: {visual.Name} -> {visual.Output}" + (resolved.FromSample ? " (샘플 보충)" : ""));
             }
 
             var snorlaxInputs = Visuals.Where(item => item.CleanSnorlax)
                 .Select(visual =>
                 {
-                    var entry = FindUniqueEntry(archive, "Visual", Path.GetFileNameWithoutExtension(visual.Name), [".png"], null)!;
+                    var resolved = Resolve(VisualRequirement(visual));
                     return (Definition: visual,
-                        Source: SafeExtractedPath(extracted, entry.FullName),
-                        Destination: Path.Combine(data, "extra", visual.Output));
+                        Source: SafeExtractedPath(resolved.Root, resolved.Entry.FullName),
+                        Destination: Path.Combine(data, "extra", visual.Output),
+                        resolved.FromSample);
                 }).ToArray();
             await Task.Run(() => ConvertSnorlaxVisuals(snorlaxInputs), token);
             foreach (var item in snorlaxInputs)
-                log($"이미지 가공: {item.Definition.Name} -> {item.Definition.Output}");
+                log($"이미지 가공: {item.Definition.Name} -> {item.Definition.Output}" + (item.FromSample ? " (샘플 보충)" : ""));
 
             progress?.Report(new ProgressUpdate(14, "음원 가공", "사용자가 준비한 음원을 16kHz 모노 형식으로 변환합니다."));
             foreach (var definition in Audio)
             {
                 token.ThrowIfCancellationRequested();
-                var entry = FindUniqueEntry(archive, "Audio", definition.Name, [".mp3", ".wav"], null)!;
-                var source = SafeExtractedPath(extracted, entry.FullName);
+                var resolved = Resolve(AudioRequirement(definition));
+                var entry = resolved.Entry;
+                var source = SafeExtractedPath(resolved.Root, entry.FullName);
                 var output = Path.Combine(data, "audio", definition.Output);
                 var disabledMarker = Path.Combine(disabled, definition.Output + ".disabled");
                 if (entry.Length == 0)
                 {
                     if (File.Exists(output)) File.Delete(output);
                     await File.WriteAllTextAsync(disabledMarker, "disabled", Encoding.ASCII, token);
-                    log($"음원 생략: {Path.GetFileName(source)} (0바이트 표시 파일)");
+                    log($"음원 생략: {Path.GetFileName(source)} (0바이트 표시 파일)" + (resolved.FromSample ? " (샘플 보충)" : ""));
                     continue;
                 }
                 if (File.Exists(disabledMarker)) File.Delete(disabledMarker);
                 var samples = await Task.Run(() => LoadAndConvertAudio(source, definition, token), token);
                 await File.WriteAllBytesAsync(output, EncodeTpa(samples), token);
-                log($"음원 가공: {Path.GetFileName(source)} -> {definition.Output}");
+                log($"음원 가공: {Path.GetFileName(source)} -> {definition.Output}" + (resolved.FromSample ? " (샘플 보충)" : ""));
             }
         }
         await File.WriteAllTextAsync(marker, inputHash, Encoding.ASCII, token);
@@ -190,6 +295,92 @@ public sealed class AdditionalAssetsService
                Audio.All(item => File.Exists(Path.Combine(data, "audio", item.Output)) ||
                                  File.Exists(Path.Combine(disabled, item.Output + ".disabled")));
     }
+
+    private static IEnumerable<AssetRequirement> Requirements()
+    {
+        foreach (var visual in Visuals) yield return VisualRequirement(visual);
+        foreach (var audio in Audio) yield return AudioRequirement(audio);
+    }
+
+    private static AssetRequirement VisualRequirement(VisualDefinition definition) =>
+        new("Visual", Path.GetFileNameWithoutExtension(definition.Name),
+            $"Visual/{definition.Name}", [".png"]);
+
+    private static AssetRequirement AudioRequirement(AudioDefinition definition) =>
+        new("Audio", definition.Name,
+            $"Audio/{definition.Name}.mp3 또는 {definition.Name}.wav", [".mp3", ".wav"]);
+
+    private static ZipArchiveEntry[] FindEntries(ZipArchive archive, AssetRequirement requirement)
+    {
+        var suffixes = requirement.Extensions
+            .Select(extension => $"/{requirement.Folder}/{requirement.Stem}{extension}").ToArray();
+        return archive.Entries.Where(entry =>
+        {
+            var path = "/" + entry.FullName.Replace('\\', '/').TrimStart('/');
+            return suffixes.Any(suffix => path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+        }).ToArray();
+    }
+
+    private static string? ValidateEntryContent(ZipArchiveEntry entry, AssetRequirement requirement)
+    {
+        try
+        {
+            if (entry.Length == 0 && requirement.Folder.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (entry.Length == 0) return "파일이 비어 있습니다";
+
+            if (requirement.Folder.Equals("Visual", StringComparison.OrdinalIgnoreCase))
+            {
+                using var pngCompressed = entry.Open();
+                using var input = new MemoryStream(entry.Length > int.MaxValue ? 0 : (int)entry.Length);
+                pngCompressed.CopyTo(input);
+                input.Position = 0;
+                var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat,
+                    BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count == 0) return "PNG 화면을 읽을 수 없습니다";
+                var frame = decoder.Frames[0];
+                var visual = Visuals.Single(item =>
+                    Path.GetFileNameWithoutExtension(item.Name).Equals(requirement.Stem,
+                        StringComparison.OrdinalIgnoreCase));
+                if (visual.Name.StartsWith('D') &&
+                    (frame.PixelWidth != visual.Width || frame.PixelHeight != visual.Height))
+                    return $"크기가 {visual.Width}x{visual.Height}px이 아닙니다";
+                var stride = Math.Max(1, (frame.PixelWidth * frame.Format.BitsPerPixel + 7) / 8);
+                frame.CopyPixels(new byte[stride * frame.PixelHeight], stride, 0);
+                return null;
+            }
+
+            using var compressed = entry.Open();
+            using var memory = new MemoryStream(entry.Length > int.MaxValue ? 0 : (int)entry.Length);
+            compressed.CopyTo(memory);
+            memory.Position = 0;
+            using WaveStream reader = Path.GetExtension(entry.Name).Equals(".mp3", StringComparison.OrdinalIgnoreCase)
+                ? new Mp3FileReader(memory)
+                : new WaveFileReader(memory);
+            var definition = Audio.Single(item => item.Name.Equals(requirement.Stem,
+                StringComparison.OrdinalIgnoreCase));
+            if (reader.TotalTime.TotalSeconds < 0.1) return "음원이 0.1초보다 짧습니다";
+            if (definition.DurationSeconds > 0 &&
+                reader.TotalTime.TotalSeconds + 0.01 < definition.StartSeconds + definition.DurationSeconds)
+                return $"음원이 {definition.StartSeconds + definition.DurationSeconds:0.#}초보다 짧습니다";
+            var buffer = new byte[8192];
+            while (reader.Read(buffer, 0, buffer.Length) > 0) { }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private static string ComputeFileHash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+
+    private static string HashText(string text) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
     private static void ValidateArchiveEnvelope(ZipArchive archive, List<string> errors)
     {
@@ -207,22 +398,6 @@ public sealed class AdditionalAssetsService
             var unixType = (entry.ExternalAttributes >> 16) & 0xF000;
             if (unixType == 0xA000) errors.Add($"심볼릭 링크는 사용할 수 없습니다: {entry.FullName}");
         }
-    }
-
-    private static ZipArchiveEntry? FindUniqueEntry(ZipArchive archive, string folder, string stem,
-        IReadOnlyCollection<string> extensions, List<string>? errors)
-    {
-        var suffixes = extensions.Select(ext => $"/{folder}/{stem}{ext}").ToArray();
-        var matches = archive.Entries.Where(entry =>
-        {
-            var path = "/" + entry.FullName.Replace('\\', '/').TrimStart('/');
-            return suffixes.Any(suffix => path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
-        }).ToArray();
-        if (matches.Length == 1) return matches[0];
-        errors?.Add(matches.Length == 0
-            ? $"누락: {folder}/{stem}.({string.Join('/', extensions.Select(x => x.TrimStart('.')))})"
-            : $"중복: {folder}/{stem} 파일은 하나만 넣어 주세요.");
-        return null;
     }
 
     private static async Task ExtractSafelyAsync(ZipArchive archive, string root, CancellationToken token)
@@ -298,7 +473,7 @@ public sealed class AdditionalAssetsService
     }
 
     private static void ConvertSnorlaxVisuals(
-        IReadOnlyList<(VisualDefinition Definition, string Source, string Destination)> inputs)
+        IReadOnlyList<(VisualDefinition Definition, string Source, string Destination, bool FromSample)> inputs)
     {
         var frames = new List<BgraBitmap>(inputs.Count);
         foreach (var item in inputs)

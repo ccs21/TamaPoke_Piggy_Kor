@@ -96,6 +96,7 @@ if (-not $SkipFlasher) {
     $package = Join-Path $release 'TamaPoke-Korean-Public-Flasher'
     Reset-ChildDirectory $package $release
     Copy-Item -LiteralPath (Join-Path $publish 'TamaPokeFlasher.exe') -Destination (Join-Path $package 'TamaPoke-Flasher.exe')
+    Copy-Item -LiteralPath (Join-Path $root 'samples\sample_Additional_assets.zip') -Destination $package
     Copy-Item -LiteralPath (Join-Path $root 'FLASHER-GUIDE.txt') -Destination $package
     foreach ($notice in @('LICENSE','CREDITS.md','THIRD_PARTY_NOTICES.md')) {
         Copy-Item -LiteralPath (Join-Path $root $notice) -Destination $package

@@ -144,7 +144,7 @@
             </Grid.ColumnDefinitions>
             <StackPanel>
               <TextBlock Text="사용자 추가 자산" Foreground="#C5E9FF" FontSize="15" FontWeight="Bold" />
-              <TextBlock x:Name="AssetStatusText" Text="Additional_assets.zip을 확인하고 있습니다."
+              <TextBlock x:Name="AssetStatusText" Text="추가 자산 ZIP을 확인하고 있습니다."
                          Foreground="#D8E8F6" Margin="0,5,12,0" TextWrapping="Wrap" />
               <TextBlock Text="포켓몬 스프라이트는 설치할 때 원본 저장소에서 자동으로 준비하며 이후에는 캐시를 재사용합니다."
                          Foreground="#A4B2C6" Margin="0,4,12,0" FontSize="12" TextWrapping="Wrap" />

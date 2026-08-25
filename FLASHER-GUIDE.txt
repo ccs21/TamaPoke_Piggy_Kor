@@ -3,9 +3,11 @@
 
 중요 경고
 ---------
-이 플래셔, 공개 저장소 및 릴리스에는 포켓몬 스프라이트와 추가 이미지·음원이
-들어 있지 않습니다. 본인이 직접 제작했거나 소프트웨어 삽입·편집·사용 권한을
-보유한 파일만 준비하세요.
+이 플래셔, 공개 저장소 및 릴리스에는 포켓몬 스프라이트와 실제 추가 음원이
+들어 있지 않습니다. 함께 제공되는 sample_Additional_assets.zip에는 ccs21이
+직접 제작한 기본 이미지와 음원 생략용 0바이트 표시 파일만 들어 있습니다.
+맞춤 자산에는 본인이 직접 제작했거나 소프트웨어 삽입·편집·사용 권한을 보유한
+파일만 넣으세요.
 
 플래셔가 만든 전체 펌웨어(*-full.bin), Additional_assets.zip, 스프라이트
 캐시를 제3자에게 재배포하지 마세요. 완성 펌웨어에는 서로 다른 권리의 코드와
@@ -15,16 +17,22 @@
 준비 순서
 ---------
 1. TamaPoke-Flasher.exe를 원하는 폴더에 둡니다.
-2. 아래 구성으로 Additional_assets.zip을 직접 만들어 같은 폴더에 둡니다.
+2. 함께 들어 있는 sample_Additional_assets.zip을 같은 폴더에 그대로 둡니다.
 3. ESP32-S3 기기의 화면이 켜진 상태로 USB-C 데이터 케이블을 연결합니다.
 4. 플래셔를 실행하고 새로고침으로 추가 자산 감지를 확인합니다.
 5. "자동 확인 후 설치"를 누릅니다.
 
+기본 설치에는 별도 자산 준비가 필요 없습니다. 맞춤 이미지나 음원을 쓰려면
+sample_Additional_assets.zip을 복사해 Additional_assets.zip으로 이름을 바꾼
+뒤 복사본만 수정하세요. 두 ZIP이 모두 있으면 Additional_assets.zip을 우선하며,
+누락되거나 손상된 파일은 확인 후 샘플에서 보충할 수 있습니다. 중복 파일은
+사용자가 직접 정리해야 합니다.
+
 일반 사용자는 Arduino나 Python을 설치할 필요가 없습니다. 처음 설치할 때
 필요한 도구와 스프라이트를 내려받으므로 인터넷 연결이 필요합니다.
 
-Additional_assets.zip 필수 구성
--------------------------------
+맞춤 Additional_assets.zip 구성
+--------------------------------
 Visual\L01.png  로딩 화면 (권장 350x350, 검은 배경 합성)
 Visual\B01.png  닫힌 포획 볼 (권장 160x160, 검은 배경 합성)
 Visual\B02.png  열린 포획 볼 (권장 160x160, 검은 배경 합성)
@@ -93,7 +101,6 @@ Nintendo, Creatures, GAME FREAK 및 Bandai와 제휴하거나 승인받지 않�
 준수하세요. 상세 크레딧과 라이선스 파일은 스프라이트 캐시에 보존됩니다.
 
 게시자: ccs21
-문의: ccs2121@naver.com
 프로젝트: https://github.com/ccs21/TamaPoke_Piggy_Kor
 원본 프로젝트: https://github.com/socquique/TamaPoke
 스프라이트 원본: https://github.com/PMDCollab/SpriteCollab

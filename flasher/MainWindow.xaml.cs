@@ -34,7 +34,7 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        AppendLog("타마포케 배포용 플래셔 2.0.0 시작");
+        AppendLog("타마포케 배포용 플래셔 2.2.0 시작");
         AppendLog($"로그 파일: {_logFilePath}");
         RefreshAssetStatus();
         await RefreshDevicesAsync();
@@ -106,10 +106,27 @@ public partial class MainWindow : Window
         {
             var details = string.Join("\n", assetStatus.Errors.Select(error => $"• {error}"));
             MessageBox.Show(this,
-                $"플래셔 실행 파일과 같은 폴더의 Additional_assets.zip을 확인해 주세요.\n\n{details}",
+                $"플래셔 실행 파일과 같은 폴더의 Additional_assets.zip과 " +
+                $"sample_Additional_assets.zip을 확인해 주세요.\n\n{details}",
                 "추가 자산 확인",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
+        }
+
+        var allowSampleSupplement = false;
+        if (assetStatus.RequiresSampleSupplement)
+        {
+            var missing = string.Join("\n", assetStatus.MissingFiles.Select(file => $"• {file}"));
+            var supplementAnswer = MessageBox.Show(this,
+                "누락된 파일이 있습니다.\n\n" +
+                "아니오를 눌러 직접 누락된 파일을 보충하거나, 예를 눌러\n" +
+                "sample_Additional_assets.zip에서 누락된 파일을 자동으로 보충합니다.\n\n" +
+                $"누락된 파일:\n{missing}\n\n" +
+                "계속 진행하시겠습니까?",
+                "누락된 추가 자산",
+                MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (supplementAnswer != MessageBoxResult.Yes) return;
+            allowSampleSupplement = true;
         }
 
         SetBusy(true);
@@ -205,7 +222,8 @@ public partial class MainWindow : Window
                     progress, cancellationToken);
             }
 
-            var additional = await _additionalAssets.PrepareAsync(assetStatus, AppendLog, progress, cancellationToken);
+            var additional = await _additionalAssets.PrepareAsync(assetStatus, allowSampleSupplement,
+                AppendLog, progress, cancellationToken);
             var sprites = await _spritePipeline.PrepareAsync(AppendLog, progress, cancellationToken);
             var imageBuilder = new FirmwareBuildService(payload);
             var firmwarePath = await imageBuilder.BuildAsync(board, sprites, additional,

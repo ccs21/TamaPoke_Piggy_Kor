@@ -7,7 +7,7 @@
 설치 과정은 크게 다음 네 단계입니다.
 
 1. 공개 플래셔의 압축을 풉니다.
-2. 샘플 추가 자산 ZIP을 준비합니다.
+2. 압축 안의 샘플 추가 자산 ZIP이 함께 있는지 확인합니다.
 3. 화면을 켠 ESP32-S3 기기를 USB로 연결합니다.
 4. 플래셔에서 `자동 확인 후 설치`를 누릅니다.
 
@@ -17,16 +17,17 @@
 
 ```text
 TamaPoke-Flasher.exe
-Additional_assets.zip
+sample_Additional_assets.zip
 ```
 
 `TamaPoke-Flasher.exe`는 필요한 파일을 내려받고, 연결된 기종에 맞는 펌웨어를
 만든 뒤 기기에 설치하는 프로그램입니다.
 
-`Additional_assets.zip`에는 로딩 화면, 포획 화면, 일부 미니게임 이미지와
-선택적인 음원이 들어갑니다.
+`sample_Additional_assets.zip`에는 기본 로딩·포획·미니게임 이미지와 음원
+생략용 0바이트 표시 파일이 들어 있습니다. 공개 플래셔 ZIP에 함께 들어 있으므로
+별도로 내려받거나 이름을 바꿀 필요가 없습니다.
 
-포켓몬 151종의 일반·이로치 스프라이트는 `Additional_assets.zip`에 넣지
+포켓몬 151종의 일반·이로치 스프라이트는 추가 자산 ZIP에 넣지
 않습니다. 플래셔가 설치 과정에서 원본 제공처로부터 자동으로 내려받습니다.
 
 ## 2. 준비물
@@ -38,7 +39,7 @@ Additional_assets.zip
 - 데이터 전송이 가능한 USB-C 케이블
 - 인터넷 연결
 - 공개 플래셔
-- 샘플 추가 자산 ZIP
+- 공개 플래셔 ZIP에 포함된 샘플 추가 자산 ZIP
 
 충전 전용 USB 케이블은 사용할 수 없습니다. 충전은 되는데 플래셔에 기기가
 표시되지 않는다면 다른 USB 케이블을 사용해 보세요.
@@ -60,10 +61,11 @@ C:\TamaPoke-Installer
 ```text
 C:\TamaPoke-Installer
 ├─ TamaPoke-Flasher.exe
-└─ Additional_assets.zip
+└─ sample_Additional_assets.zip
 ```
 
-두 파일은 반드시 같은 폴더에 있어야 합니다.
+두 파일은 반드시 같은 폴더에 있어야 합니다. 맞춤 자산을 사용하는 경우에만
+같은 위치에 `Additional_assets.zip`이 하나 더 생깁니다.
 
 ## 4. 공개 플래셔 내려받기
 
@@ -71,30 +73,30 @@ C:\TamaPoke-Installer
 2. 최신 공개 플래셔 ZIP을 내려받습니다.
 3. 내려받은 ZIP을 마우스 오른쪽 버튼으로 누릅니다.
 4. `압축 풀기` 또는 `모두 압축 풀기`를 선택합니다.
-5. 압축을 푼 폴더에서 `TamaPoke-Flasher.exe`를 찾습니다.
-6. 이 파일을 앞에서 만든 설치 폴더에 넣습니다.
+5. 압축을 푼 폴더에서 `TamaPoke-Flasher.exe`와
+   `sample_Additional_assets.zip`을 찾습니다.
+6. 두 파일을 함께 앞에서 만든 설치 폴더에 넣습니다.
 
 ZIP 파일 안에서 프로그램을 바로 실행하지 마세요. 반드시 압축을 먼저 풀어야
 합니다.
 
-## 5. 샘플 추가 자산 준비하기
+## 5. 샘플 추가 자산 확인하기
 
-1. [sample_Additional_assets.zip](https://github.com/ccs21/TamaPoke_Piggy_Kor/releases/latest/download/sample_Additional_assets.zip)을 내려받습니다.
-2. 파일을 `TamaPoke-Flasher.exe`가 있는 폴더에 복사합니다.
-3. 파일 이름을 `Additional_assets.zip`으로 변경합니다.
+공개 플래셔 ZIP을 정상적으로 풀었다면 `sample_Additional_assets.zip`이 실행
+파일 옆에 이미 있습니다. 기본 이미지로 설치할 때는 이 파일을 수정하거나
+이름을 바꾸지 말고 그대로 두세요. 플래셔가 자동으로 인식합니다.
 
-```text
-변경 전: sample_Additional_assets.zip
-변경 후: Additional_assets.zip
-```
+맞춤 이미지나 음원을 사용하려면 다음 순서로 **복사본**을 만듭니다.
 
-다음처럼 이름이 잘못되지 않았는지 확인하세요.
+1. `sample_Additional_assets.zip`을 복사합니다.
+2. 복사본의 이름만 `Additional_assets.zip`으로 바꿉니다.
+3. 원본 `sample_Additional_assets.zip`은 보충용으로 그대로 보관합니다.
+4. `Additional_assets.zip`의 압축을 풀어 이미지나 음원을 교체합니다.
 
-```text
-Additional_assets.zip.zip
-Additional_assets (1).zip
-sample_Additional_assets.zip
-```
+두 ZIP이 모두 있으면 플래셔는 `Additional_assets.zip`을 먼저 사용합니다.
+그 안에 누락되거나 손상된 항목이 있으면 목록을 보여주고, 사용자가 `예`를
+선택했을 때만 샘플 ZIP에서 해당 항목을 보충합니다. 중복 파일은 자동으로
+정리하지 않으므로 사용자가 직접 하나만 남겨야 합니다.
 
 ### 파일 확장자가 보이지 않을 때
 
@@ -162,8 +164,9 @@ Additional_assets.zip
 
 샘플 이미지를 그대로 사용한다면 이 장은 건너뛰어도 됩니다.
 
-이미지를 바꾸려면 `sample_Additional_assets.zip`의 압축을 먼저 풉니다. 그림
-편집 프로그램에서 해당 PNG를 열어 수정한 뒤 같은 이름으로 저장하세요.
+이미지를 바꾸려면 앞에서 만든 `Additional_assets.zip` 복사본의 압축을 풉니다.
+샘플 원본은 수정하지 마세요. 그림 편집 프로그램에서 해당 PNG를 열어 수정한
+뒤 같은 이름으로 저장하세요.
 
 ### 이미지 공통 주의사항
 
@@ -319,6 +322,7 @@ Windows가 확장자를 숨긴 상태에서 `BAT.wav.mp3`처럼 이중 확장자
 4. `ZIP 파일로 압축`을 선택합니다.
 5. 만들어진 ZIP 이름을 `Additional_assets.zip`으로 변경합니다.
 6. `TamaPoke-Flasher.exe`와 같은 폴더에 넣습니다.
+7. 원본 `sample_Additional_assets.zip`도 같은 폴더에 그대로 둡니다.
 
 ZIP을 열었을 때 가장 먼저 `Visual`과 `Audio` 두 폴더가 보이는 것이 가장
 안전합니다.
@@ -410,16 +414,16 @@ TamaPoke-Flasher-Data
 
 ## 17. 자주 발생하는 문제
 
-### Additional_assets.zip을 찾지 못했다고 나옵니다
+### 추가 자산 ZIP을 찾지 못했다고 나옵니다
 
-`Additional_assets.zip`과 `TamaPoke-Flasher.exe`가 같은 폴더에 있는지
-확인하세요. 파일 이름이 `sample_Additional_assets.zip`인 상태라면
-`Additional_assets.zip`으로 바꿔야 합니다.
+`sample_Additional_assets.zip`과 `TamaPoke-Flasher.exe`가 같은 폴더에 있는지
+확인하세요. 배포 ZIP 안에서 실행하지 말고 두 파일을 모두 압축 해제해야 합니다.
 
 ### 추가 자산이 누락되었다고 나옵니다
 
-ZIP을 열고 `Visual`과 `Audio` 폴더가 들어 있는지 확인하세요. 파일 이름을
-임의로 바꾸지 마세요.
+`Additional_assets.zip`에서 누락되거나 손상된 파일을 발견한 상태입니다.
+확인창에서 `예`를 누르면 샘플 ZIP의 같은 파일로 보충하고, `아니오`를 누르면
+설치를 중단한 뒤 사용자가 직접 파일을 고칠 수 있습니다.
 
 ### 음원 중복 오류가 나옵니다
 
@@ -473,5 +477,5 @@ tamapoke-1.75-full.bin
 tamapoke-1.75C-full.bin
 ```
 
-다른 사람에게는 공개 플래셔, 샘플 ZIP과 이 설치 안내를 전달하고 각자의 PC에서
-직접 설치하도록 안내하세요.
+다른 사람에게는 샘플 ZIP이 함께 든 공개 플래셔 배포 ZIP과 이 설치 안내를
+전달하고 각자의 PC에서 직접 설치하도록 안내하세요.
