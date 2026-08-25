@@ -103,6 +103,7 @@ if (-not $SkipFlasher) {
     $packageDocs = Join-Path $package 'docs'
     $packageLicenses = Join-Path $package 'licenses'
     New-Item -ItemType Directory -Force -Path $packageDocs,$packageLicenses | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'docs\INSTALLATION_GUIDE.md') -Destination $packageDocs
     Copy-Item -LiteralPath (Join-Path $root 'docs\ADDITIONAL_ASSETS_GUIDE.md') -Destination $packageDocs
     Copy-Item -LiteralPath (Join-Path $root 'docs\ASSET_LAYOUT.svg') -Destination $packageDocs
     Copy-Item -LiteralPath (Join-Path $root 'docs\LEGAL.md') -Destination $packageDocs

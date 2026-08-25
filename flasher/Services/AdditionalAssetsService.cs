@@ -15,7 +15,7 @@ public sealed record AdditionalAssetBuildResult(string DataDirectory, string Inp
 
 public sealed class AdditionalAssetsService
 {
-    private const string PipelineVersion = "additional-assets-v3";
+    private const string PipelineVersion = "additional-assets-v4";
     private const int TargetRate = 16_000;
     private const int MaxEntries = 128;
     private const long MaxExpandedBytes = 256L * 1024 * 1024;
@@ -57,7 +57,7 @@ public sealed class AdditionalAssetsService
     ];
 
     private readonly string _cacheRoot = AppStoragePaths.Under(
-        "Cache", "additional", "3.0.0");
+        "Cache", "additional", "4.0.0");
 
     public string ArchivePath => Path.Combine(AppContext.BaseDirectory, "Additional_assets.zip");
 
@@ -78,8 +78,19 @@ public sealed class AdditionalAssetsService
             ValidateArchiveEnvelope(archive, errors);
             foreach (var visual in Visuals)
                 FindUniqueEntry(archive, "Visual", Path.GetFileNameWithoutExtension(visual.Name), [".png"], errors);
+            var disabledAudio = 0;
             foreach (var audio in Audio)
-                FindUniqueEntry(archive, "Audio", audio.Name, [".mp3", ".wav"], errors);
+            {
+                var entry = FindUniqueEntry(archive, "Audio", audio.Name, [".mp3", ".wav"], errors);
+                if (entry?.Length == 0) disabledAudio++;
+            }
+            if (errors.Count == 0)
+            {
+                var suppliedAudio = Audio.Length - disabledAudio;
+                return new(ArchivePath, true, true,
+                    $"추가 이미지 {Visuals.Length}개 · 음원 {suppliedAudio}개 · 생략 {disabledAudio}개 · {hash![..12]}",
+                    hash, errors);
+            }
         }
         catch (Exception ex)
         {
@@ -102,9 +113,10 @@ public sealed class AdditionalAssetsService
         var root = Path.Combine(_cacheRoot, key);
         var extracted = Path.Combine(root, "extracted");
         var data = Path.Combine(root, "data");
+        var disabled = Path.Combine(root, "disabled");
         var marker = Path.Combine(root, "complete.sha256");
         if (File.Exists(marker) && File.ReadAllText(marker).Trim() == inputHash &&
-            RequiredOutputsExist(data))
+            RequiredOutputsExist(data, disabled))
         {
             log($"추가 자산 캐시 재사용: {root}");
             progress?.Report(new ProgressUpdate(18, "추가 자산 준비 완료", "이전에 가공한 동일한 ZIP을 재사용합니다."));
@@ -114,6 +126,7 @@ public sealed class AdditionalAssetsService
         Directory.CreateDirectory(extracted);
         Directory.CreateDirectory(Path.Combine(data, "extra"));
         Directory.CreateDirectory(Path.Combine(data, "audio"));
+        Directory.CreateDirectory(disabled);
         progress?.Report(new ProgressUpdate(8, "추가 자산 압축 해제", "Additional_assets.zip을 안전하게 검사하고 캐시에 보관합니다."));
         using (var archive = ZipFile.OpenRead(status.ArchivePath))
         {
@@ -152,6 +165,15 @@ public sealed class AdditionalAssetsService
                 var entry = FindUniqueEntry(archive, "Audio", definition.Name, [".mp3", ".wav"], null)!;
                 var source = SafeExtractedPath(extracted, entry.FullName);
                 var output = Path.Combine(data, "audio", definition.Output);
+                var disabledMarker = Path.Combine(disabled, definition.Output + ".disabled");
+                if (entry.Length == 0)
+                {
+                    if (File.Exists(output)) File.Delete(output);
+                    await File.WriteAllTextAsync(disabledMarker, "disabled", Encoding.ASCII, token);
+                    log($"음원 생략: {Path.GetFileName(source)} (0바이트 표시 파일)");
+                    continue;
+                }
+                if (File.Exists(disabledMarker)) File.Delete(disabledMarker);
                 var samples = await Task.Run(() => LoadAndConvertAudio(source, definition, token), token);
                 await File.WriteAllBytesAsync(output, EncodeTpa(samples), token);
                 log($"음원 가공: {Path.GetFileName(source)} -> {definition.Output}");
@@ -162,10 +184,11 @@ public sealed class AdditionalAssetsService
         return new(data, inputHash);
     }
 
-    private static bool RequiredOutputsExist(string data)
+    private static bool RequiredOutputsExist(string data, string disabled)
     {
         return Visuals.All(item => File.Exists(Path.Combine(data, "extra", item.Output))) &&
-               Audio.All(item => File.Exists(Path.Combine(data, "audio", item.Output)));
+               Audio.All(item => File.Exists(Path.Combine(data, "audio", item.Output)) ||
+                                 File.Exists(Path.Combine(disabled, item.Output + ".disabled")));
     }
 
     private static void ValidateArchiveEnvelope(ZipArchive archive, List<string> errors)
