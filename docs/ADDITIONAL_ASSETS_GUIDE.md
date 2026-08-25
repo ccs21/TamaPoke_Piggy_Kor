@@ -5,7 +5,7 @@
 이 문서는 ZIP의 구조, 파일별 역할, 크기와 배치 규칙을 설명합니다.
 
 추가 자산은 빈 폴더에서 새로 구성하지 말고 먼저
-[배포용 샘플 ZIP](../samples/sample_Additional_assets.zip)을 내려받아 작업하세요.
+[배포용 샘플 ZIP](https://github.com/ccs21/TamaPoke_Piggy_Kor/releases/latest/download/sample_Additional_assets.zip)을 내려받아 작업하세요.
 그래픽은 샘플 이미지의 캔버스·실루엣·위치에 맞춰 새 그림으로 교체하고,
 오디오는 샘플의 파일 이름을 기준으로 실제 MP3 또는 WAV를 준비하는 방식이
 가장 안전합니다. 샘플을 수정하지 않고 그대로 설치해도 됩니다. 컴퓨터 사용과

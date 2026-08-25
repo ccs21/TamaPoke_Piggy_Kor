@@ -79,7 +79,7 @@ ZIP 파일 안에서 프로그램을 바로 실행하지 마세요. 반드시 �
 
 ## 5. 샘플 추가 자산 준비하기
 
-1. [sample_Additional_assets.zip](../samples/sample_Additional_assets.zip)을 내려받습니다.
+1. [sample_Additional_assets.zip](https://github.com/ccs21/TamaPoke_Piggy_Kor/releases/latest/download/sample_Additional_assets.zip)을 내려받습니다.
 2. 파일을 `TamaPoke-Flasher.exe`가 있는 폴더에 복사합니다.
 3. 파일 이름을 `Additional_assets.zip`으로 변경합니다.
 
@@ -475,4 +475,3 @@ tamapoke-1.75C-full.bin
 
 다른 사람에게는 공개 플래셔, 샘플 ZIP과 이 설치 안내를 전달하고 각자의 PC에서
 직접 설치하도록 안내하세요.
-
