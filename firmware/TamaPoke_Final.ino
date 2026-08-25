@@ -4326,7 +4326,9 @@ void renderDiglettGame() {
     if (!diglettCellEnabled(cell)) continue;
     int16_t cx = diglettCellX(cell);
     int16_t cy = diglettCellY(cell);
-    drawVisualAsset(gfx, "/extra/DD.tvr", cx - 33, cy - 20, 3);
+    // D01 is both the permanent empty-hole artwork and the first rise frame.
+    // Sharing one canvas keeps the hole perfectly aligned throughout animation.
+    drawDiglettFrame(0, cx - 33, cy - 20, 3);
   }
   for (uint8_t i = 0; i < DIGLETT_MAX_ACTIVE; i++) {
     int8_t cell = diglettCells[i];

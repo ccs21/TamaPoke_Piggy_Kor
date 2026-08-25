@@ -43,7 +43,6 @@ public sealed class AdditionalAssetsService
         new("D02.png", "D02.tvr", 22, 17, false),
         new("D03.png", "D03.tvr", 22, 17, false),
         new("D04.png", "D04.tvr", 22, 17, false),
-        new("DD.png", "DD.tvr", 22, 16, false),
     ];
 
     private static readonly AudioDefinition[] Audio =
