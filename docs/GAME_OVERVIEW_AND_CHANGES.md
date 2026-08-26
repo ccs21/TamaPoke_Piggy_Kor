@@ -18,10 +18,6 @@
   돌아갑니다. 산책·미니게임·배틀·통신 진행 중에는 홈 이동으로 동작하지 않습니다.
 - PWR 버튼을 5초 이상 누르면 전원 끄기와 슬립 중 하나를 선택할 수 있습니다.
 
-| 설정 화면 | 시간 보정 안내 |
-| --- | --- |
-| <img src="images/game-overview/settings.png" alt="설정 화면" width="280"> | <img src="images/game-overview/time-correction.png" alt="시간 보정 안내" width="280"> |
-
 ## 설치 방식
 
 - 웹 설치 대신 Windows 통합 플래셔를 사용합니다.
@@ -166,10 +162,6 @@
 - 아이템은 종류별로 최대 15개까지 보관합니다.
 - 아이템과 기술 디스크는 산책, 야생 배틀, 통신 배틀 등에서 얻을 수 있습니다.
 
-| 오늘의 목표 | 아이템 |
-| --- | --- |
-| <img src="images/game-overview/daily-goals.png" alt="오늘의 목표 화면" width="280"> | <img src="images/game-overview/items.png" alt="아이템 화면" width="280"> |
-
 ## 배틀
 
 - 메뉴에서 야생 포켓몬과 싸우거나, 랜덤 출현 또는 근거리 통신으로 배틀을 시작할
@@ -215,8 +207,6 @@
 - 통신으로 받은 알은 이로치 확률이 1/4로 높아집니다.
 - 현재 버전에는 성별 데이터와 성별에 따른 짝짓기 제한이 없습니다.
 
-<p align="center"><img src="images/game-overview/communication.png" alt="통신 메뉴" width="300"></p>
-
 ## 추가 이미지와 오디오
 
 - 로딩, 포획, 미니게임 등에 사용할 추가 이미지를 사용자가 준비할 수 있습니다.
@@ -226,8 +216,6 @@
   펌웨어를 배포하지 않습니다.
 - 준비 방법과 파일명은 [추가 자산 상세 제작 안내](ADDITIONAL_ASSETS_GUIDE.md)를
   확인하세요.
-
-<p align="center"><img src="images/game-overview/web-manual.png" alt="기기에서 표시되는 웹 매뉴얼 QR 코드" width="300"></p>
 
 ## 원본 대비 핵심 변화 요약
 
