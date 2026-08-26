@@ -2926,6 +2926,10 @@ void unloadActivitySprites() {
 }
 
 void beginActivityGame(uint8_t mode) {
+  // Starting a minigame is free.  Walking has its own explicit stamina cost
+  // in Pet::beginWalk(), but opening any of the five minigames must preserve
+  // the current energy value.
+  const uint8_t energyAtEntry = pet.energy;
   unloadActivitySprites();
   gameMenuOpen = false;
   gameOpen = true;
@@ -2945,6 +2949,7 @@ void beginActivityGame(uint8_t mode) {
   miniSpeedNoticeUntil = 0;
   minigameAudioBegin();
   minigameSfxPlay(SFX_GAME_START);
+  pet.energy = energyAtEntry;
 }
 
 void startRunnerGame() {
@@ -3338,10 +3343,12 @@ void renderEeveeGame() {
       }
   }
   drawGameScene();
-  // Keep falling fruit readable against a quiet, field-like background.
-  gfx->fillRect(26, 108, 414, 112, C565(0xa9, 0xdc, 0xf2));
-  gfx->fillRect(26, 220, 414, 150, C565(0xb8, 0xdc, 0x83));
-  gfx->drawLine(26, 220, 440, 220, C565(0x62, 0x9b, 0x4c));
+  // Cover the complete canvas so the field reaches the round display edge.
+  // A centered rectangle leaves its four edges visible inside the circular
+  // viewport, especially in simulator screenshots.
+  gfx->fillRect(0, 0, 466, 220, C565(0xa9, 0xdc, 0xf2));
+  gfx->fillRect(0, 220, 466, 246, C565(0xb8, 0xdc, 0x83));
+  gfx->drawLine(0, 220, 465, 220, C565(0x62, 0x9b, 0x4c));
   gfx->fillRoundRect(54, 322, 358, 7, 3, C565(0x82, 0xb4, 0x58));
   drawActivityHeader("냠냠 이브이", pet.memoHi, now);
   for (auto &object : fallingObjects) if (object.active) {
@@ -3601,20 +3608,11 @@ void spawnDiglettWave() {
 
 void startDiglettGame() {
   if (pet.isEgg() || pet.sleeping || pet.ceremony) return;
-  gameMenuOpen = false;
-  gameOpen = true;
-  gameMode = 3;
-  gameOverUntil = 0;
-  gameScore = 0;
-  gameMisses = 0;
-  gameNewHi = false;
-  gameGain = 0;
+  beginActivityGame(3);
   clearDiglettWave();
   diglettLastCell = -1;
   diglettUntil = millis() + ACTIVITY_GAME_MS;
   diglettSpawnAt = millis() + 260;
-  minigameAudioBegin();
-  minigameSfxPlay(SFX_GAME_START);
   minigameBgmStart();
 }
 
