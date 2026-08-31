@@ -6303,7 +6303,10 @@ void renderBattle() {
   gfx->setTextColor(ink);
   gfx->setCursor(58, 132);
   gfx->print(leftLv);
-  drawTypeChips(112, 128, mine, false);
+  // 왼쪽은 레벨을 바깥쪽에 두고 타입을 중앙 쪽 끝(HP 바의 오른쪽)에
+  // 맞춘다. 오른쪽의 타입 -> 레벨 배치와 정확히 대칭이며 Lv.100처럼
+  // 글자가 길어져도 단일 타입 배지와 겹치지 않는다.
+  drawTypeChips(204, 128, mine, true);
   drawTypeChips(262, 128, wild, false);
   gfx->setTextSize(1);
   gfx->setTextColor(ink);
