@@ -55,6 +55,7 @@ void Pet::newEgg() {
   careMissed = false;
   careDueEpoch = 0;
   sleepNeedMinutes = 0;
+  automaticSleepNight = 0;
   sitterUntilEpoch = 0;
   evoDeclinedDay = 0;
   farDeclinedDay = 0;
@@ -84,10 +85,34 @@ static uint8_t minigameRewardTier(uint8_t performance) {
   return performance >= 80 ? 3 : performance >= 50 ? 2 : performance >= 20 ? 1 : 0;
 }
 
-static bool isMoonSleepNight(uint32_t epoch) {
-  if (!epoch) return false;  // RTC 미설정 시에는 주간 규칙을 사용
+static uint32_t moonSleepNightKey(uint32_t epoch) {
+  if (!epoch) return 0;  // RTC 미설정 시에는 자동 취침하지 않음
   uint8_t hour = (uint8_t)((epoch / 3600UL) % 24UL);
-  return hour >= 22 || hour < 9;
+  uint32_t day = epoch / 86400UL;
+  // 22시와 그 다음 날 09시 전까지를 같은 밤으로 묶는다. +1은
+  // 유효한 첫 날짜도 미처리 값 0과 구분하기 위한 저장용 오프셋이다.
+  if (hour >= 22) return day + 1UL;
+  if (hour < 9) return day ? day : 1UL;
+  return 0;
+}
+
+static bool isMoonSleepNight(uint32_t epoch) {
+  return moonSleepNightKey(epoch) != 0;
+}
+
+bool Pet::applyAutomaticBedtime(uint32_t epoch) {
+  uint32_t night = moonSleepNightKey(epoch);
+  if (!night || isEgg() || ceremony != CER_NONE || walkCarePaused ||
+      automaticBedtimeBlocked || automaticSleepNight == night)
+    return false;
+
+  automaticSleepNight = night;
+  if (!sleeping) {
+    sleeping = true;
+    sitterUntilEpoch = 0;
+    sleepNeedMinutes = 0;
+  }
+  return true;
 }
 
 void Pet::applySleepingMinute(uint32_t minuteEpoch) {
@@ -101,15 +126,23 @@ void Pet::applySleepingMinute(uint32_t minuteEpoch) {
   if (sleepNeedMinutes < interval) return;
 
   sleepNeedMinutes = 0;
-  const uint8_t floor = night ? SLEEP_NEED_NIGHT_FLOOR : 0;
-  fullness = dropTo(fullness, 1, floor);
-  joy = dropTo(joy, 1, floor);
-  hygiene = dropTo(hygiene, 1, floor);
+  if (night) {
+    // 밤에는 잠든 포켓몬의 기분과 청결을 그대로 보존한다. 배부름은
+    // 5분마다 줄지만 50에서 멈추며, 이미 50 이하면 현재 값을 유지한다.
+    fullness = dropTo(fullness, 1, SLEEP_FULLNESS_NIGHT_FLOOR);
+    return;
+  }
+  fullness = dropTo(fullness, 1, 0);
+  joy = dropTo(joy, 1, 0);
+  hygiene = dropTo(hygiene, 1, 0);
 }
 
 void Pet::setClock(uint32_t nowEpoch) {
   lastSeenEpoch = nowEpoch;
-  if (nowEpoch) save();  // persiste ya: un corte de luz no pierde la referencia
+  if (nowEpoch) {
+    applyAutomaticBedtime(nowEpoch);
+    save();  // persiste ya: un corte de luz no pierde la referencia
+  }
 }
 
 void Pet::syncClock(uint32_t nowEpoch) {
@@ -121,6 +154,7 @@ void Pet::syncClock(uint32_t nowEpoch) {
   if (nowEpoch == 0) return;
   uint32_t mins = (seen && nowEpoch > seen) ? (nowEpoch - seen) / 60 : 0;
   if (mins < 2 || ceremony != CER_NONE) {
+    applyAutomaticBedtime(nowEpoch);
     save();  // primera vez o sin tiempo que aplicar: solo persistir la hora
     return;
   }
@@ -132,6 +166,9 @@ void Pet::syncClock(uint32_t nowEpoch) {
       if (ageMinutes >= 3) hatch();  // eclosiona en tu ausencia
       continue;
     }
+    // 화면이 꺼져 있어도 22시를 지난 첫 계산 시점에 자동으로 잠든다.
+    // 같은 밤에 사용자가 깨운 뒤에는 저장된 밤 식별자가 재취침을 막는다.
+    applyAutomaticBedtime(seen + (i + 1UL) * 60UL);
     // A walk protects the four care gauges, but age, level and hatch/evolution
     // clocks continue. The flag is restored from the walk checkpoint before
     // syncClock() runs, so sleep and reboot cannot re-apply the paused decay.
@@ -142,8 +179,9 @@ void Pet::syncClock(uint32_t nowEpoch) {
     uint32_t minuteEpoch = seen + (i + 1UL) * 60UL;
     if (sitterActive(minuteEpoch)) continue;
     if (sleeping) {
-      // 달 수면에만 시간대별 완화 규칙을 적용한다. 밤에는 5분 주기와
-      // 최저 30, 낮에는 4분 주기로 0까지 내려간다.
+      // 달 수면에만 시간대별 완화 규칙을 적용한다. 밤에는 기분·청결을
+      // 보존하고 배부름만 5분 주기·최저 50, 낮에는 셋 다 4분 주기로
+      // 0까지 내려간다.
       applySleepingMinute(minuteEpoch);
       continue;
     }
@@ -182,6 +220,7 @@ void Pet::update(uint32_t nowMs) {
   if ((int32_t)(nowMs - lastTick) < 0) {
     lastTick = nowMs;
   }
+  if (applyAutomaticBedtime(lastSeenEpoch)) save();
   // fin de ceremonia: la criatura se va y queda un huevo nuevo
   if (ceremony != CER_NONE && millis() > ceremonyUntil) {
     newEgg();
@@ -290,8 +329,9 @@ void Pet::tick() {
     return;
   }
 
-  // 달 수면은 체력을 회복한다. 22:00~09:00에는 다른 욕구가 5분마다
-  // 감소하되 30에서 멈추고, 그 밖에는 4분마다 0까지 감소한다.
+  // 달 수면은 체력을 회복한다. 22:00~09:00에는 기분·청결이 고정되고
+  // 배부름만 5분마다 감소하되 50에서 멈춘다. 그 밖에는 세 욕구가
+  // 4분마다 0까지 감소한다.
   // Despierto, el pulso normal ocurre cada 3 min y los debuffs siguen fuertes.
   // El peso aun se quema; la racha de buen cuidado (goodTicks) queda en pausa.
   if (sleeping) {
@@ -1328,6 +1368,10 @@ void Pet::toggleLight() {
   if (isEgg()) return;
   sleeping = !sleeping;
   if (sleeping) sitterUntilEpoch = 0;
+  // 같은 야간에 달 버튼으로 깨운 경우 자동 취침을 다시 실행하지 않는다.
+  // 다시 재우는 경우에도 같은 밤을 처리 완료로 기록한다.
+  uint32_t night = moonSleepNightKey(lastSeenEpoch);
+  if (night) automaticSleepNight = night;
   sleepNeedMinutes = 0;
   save();
 }
@@ -1397,6 +1441,7 @@ void Pet::save() {
   prefs.putUInt("cdue", careDueEpoch);
   prefs.putBool("sleep", sleeping);
   prefs.putUChar("slneed", sleepNeedMinutes);
+  prefs.putUInt("autoslp", automaticSleepNight);
   prefs.putUChar("lend", lastEnd);
   if (lastSeenEpoch) {
     prefs.putUInt("seen", lastSeenEpoch);
@@ -1489,6 +1534,7 @@ void Pet::load() {
   sleeping = prefs.getBool("sleep", false);
   sleepNeedMinutes = prefs.getUChar("slneed", 0);
   if (sleepNeedMinutes >= SLEEP_NEED_INTERVAL_NIGHT_MIN) sleepNeedMinutes = 0;
+  automaticSleepNight = prefs.getUInt("autoslp", 0);
   lastEnd = prefs.getUChar("lend", CER_NONE);
   prefs.getBytes("dexreg", dexReg, sizeof(dexReg));
   prefs.getBytes("dexcgt", dexCaught, sizeof(dexCaught));

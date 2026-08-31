@@ -787,6 +787,19 @@ bool autoSleepSceneSafe() {
   return true;
 }
 
+bool automaticBedtimeSceneBlocked() {
+  // 22시 자동 취침은 현재 사용자가 보고 있거나 진행 중인 화면을 끊지
+  // 않는다. 모든 동작을 정상적으로 마치고 메인 화면으로 돌아온 다음
+  // Pet::update()가 보류된 자동 취침을 실행한다.
+  return pairingEventActive || powerMenuOpen || clockOpen ||
+         communicationState() != COMM_OFF || gameOpen || battleOpen ||
+         walkOpen || bathUntil || hubOpen || pet.awaitingStarter() ||
+         feedMenuUntil || sleepMenuOpen || confirmUntil || choiceKind ||
+         wildPromptUntil || petEventUntil || galleryOpen || cardOpen ||
+         kbOpen || helpOpen || gameMenuOpen || pet.evolving() ||
+         pet.ceremony != CER_NONE || pet.eating() || pet.showHeart();
+}
+
 void drawWakeLoader() {
   gfx->fillScreen(0x0000);
   if (!drawVisualAsset(gfx, "/extra/L01.tvr", 58, 58)) {
@@ -1501,6 +1514,7 @@ void loop() {
   // with a newer millis() value.  Never pass the older loop timestamp into
   // Pet::update or unsigned time arithmetic can simulate a 49-day jump.
   now = millis();
+  pet.setAutomaticBedtimeBlocked(automaticBedtimeSceneBlocked());
   if (!timeCorrectionMandatory()) pet.update(now);
   updateStarterUnlock(now);
   updateBattleAnimation(now);
@@ -5367,12 +5381,16 @@ void battleTap(int16_t x, int16_t y) {
   }
 }
 
-void drawBattleHpBar(int x, int y, int w, uint16_t cur, uint16_t maxHp, uint16_t color) {
+void drawBattleHpBar(int x, int y, int w, uint16_t cur, uint16_t maxHp,
+                     uint16_t color, bool anchorRight) {
   if (maxHp == 0) maxHp = 1;
   int fw = (int)((uint32_t)cur * w / maxHp);
   if (fw > w) fw = w;
   gfx->fillRoundRect(x, y, w, 14, 4, UI_TRACK);
-  if (fw > 2) gfx->fillRoundRect(x, y, fw, 14, 4, color);
+  if (fw > 2) {
+    int fillX = anchorRight ? x + w - fw : x;
+    gfx->fillRoundRect(fillX, y, fw, 14, 4, color);
+  }
 }
 
 void battleRewardText(char *buf, size_t len) {
@@ -6272,8 +6290,10 @@ void renderBattle() {
   uint16_t enemyMax = battleRun.enemyMaxHp;
   uint16_t playerCur = battleDisplayedPlayerHp(animProgress);
   uint16_t enemyCur = battleDisplayedEnemyHp(animProgress);
-  drawBattleHpBar(58, 110, 146, playerCur, playerMax, UI_BAR_OK);
-  drawBattleHpBar(262, 110, 146, enemyCur, enemyMax, UI_BAR_BAD);
+  // 격투 게임처럼 내 HP는 중앙 쪽 끝에 고정해 왼쪽부터 비워지고,
+  // 상대 HP는 바깥쪽 끝에 고정해 오른쪽부터 비워진다.
+  drawBattleHpBar(58, 110, 146, playerCur, playerMax, UI_BAR_OK, true);
+  drawBattleHpBar(262, 110, 146, enemyCur, enemyMax, UI_BAR_BAD, false);
   drawMap(SPR_ICON_PLAY, 16, CX - 16, 101, 2, false);
 
   char leftLv[10], rightLv[10];

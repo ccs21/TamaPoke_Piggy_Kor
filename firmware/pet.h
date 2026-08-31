@@ -10,7 +10,7 @@
 #define AWAKE_NEED_INTERVAL_MIN 3           // necesidades normales: cada 3 min
 #define SLEEP_NEED_INTERVAL_DAY_MIN 4       // 달 수면: 09:00~22:00
 #define SLEEP_NEED_INTERVAL_NIGHT_MIN 5     // 달 수면: 22:00~09:00
-#define SLEEP_NEED_NIGHT_FLOOR 30           // 밤에는 이 아래로 내려가지 않음
+#define SLEEP_FULLNESS_NIGHT_FLOOR 50       // 야간 수면 중 배부름 최저치
 #define EAT_ANIM_MS 2500UL
 #define HEART_MS 1500UL
 #define EVOLVE_ANIM_MS 5200UL              // animacion de evolucion (mas larga = mas epica)
@@ -234,6 +234,7 @@ public:
   uint8_t weightEnergyPenalty() const;
   void play();
   void toggleLight();  // dormir / despertar
+  void setAutomaticBedtimeBlocked(bool blocked) { automaticBedtimeBlocked = blocked; }
   void clean();
   void caress();  // tocar al bicho
   void eggTap();  // tocar el huevo: 3 toques y eclosiona
@@ -367,6 +368,8 @@ private:
   bool careMissed = false;
   uint32_t careDueEpoch = 0;
   uint8_t sleepNeedMinutes = 0;  // 달 수면 중 다음 능력치 하락까지 누적된 분
+  uint32_t automaticSleepNight = 0;  // 그날 22시 자동 취침을 이미 처리한 밤
+  bool automaticBedtimeBlocked = false;  // 진행 중인 화면이 끝날 때까지 자동 취침 보류
   bool walkCarePaused = false;   // 산책 중에는 생활 능력치 감소만 일시 정지
   uint8_t ticksSinceSave = 0;
   bool pendingSave = false;     // guardado periodico pendiente de volcar
@@ -390,6 +393,7 @@ private:
   uint8_t careNeedValue(CareNeed need) const;
   void clearCareCall();
   void addCareMistake();
+  bool applyAutomaticBedtime(uint32_t epoch);
   void applySleepingMinute(uint32_t minuteEpoch);
   void addBond(uint8_t amt);
   void noteDailyGoal(uint8_t goalType, uint8_t amount);
