@@ -49,6 +49,7 @@ void Pet::newEgg() {
   hygiene = 100;
   poops = 0;
   ageMinutes = 0;
+  lastPetInteractMinute = 0;
   careMistakes = 0;
   mistakeCooldown = 0;
   careNeed = CARE_NEED_NONE;
@@ -886,11 +887,11 @@ void Pet::feedCandy() {
 }
 
 void Pet::playResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return;
+  if (ceremony != CER_NONE || isEgg() || score == 0) return;
   uint8_t performance = minigamePerformance(score, MINIGAME_MAX_RUNNER);
   uint8_t gain = minigameRewardTier(performance);
   trSpe = clamp100((int)trSpe + gain);
-  joy = clamp100((int)joy + 4 + performance * 11 / 100);
+  joy = clamp100((int)joy + 20);
   energy = dropTo(energy, 5, 5);
   fullness = dropTo(fullness, 2, 5);
   int burn = (int)weight - performance * 5 / 100;
@@ -904,13 +905,13 @@ void Pet::playResult(uint8_t score) {
 }
 
 uint8_t Pet::applyCatchResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (ceremony != CER_NONE || isEgg() || score == 0) return 0;
   if (score > 100) score = 100;
   uint8_t performance = minigamePerformance(score, MINIGAME_MAX_SNORLAX);
   uint8_t gain = minigameRewardTier(performance);
   trDef = clamp100((int)trDef + gain);
   energy = clamp100((int)energy + 4 + performance * 14 / 100);
-  joy = clamp100((int)joy + 4 + performance * 8 / 100);
+  joy = clamp100((int)joy + 20);
   if (performance >= 20) heartUntil = millis() + HEART_MS;
   if (score > catchHi) catchHi = score;
   addBond(1);
@@ -921,10 +922,10 @@ uint8_t Pet::applyCatchResult(uint8_t score) {
 }
 
 uint8_t Pet::applyMemoResult(uint8_t rounds) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (ceremony != CER_NONE || isEgg() || rounds == 0) return 0;
   uint8_t performance = minigamePerformance(rounds, MINIGAME_MAX_EEVEE);
   uint8_t gain = minigameRewardTier(performance);
-  joy = clamp100((int)joy + 4 + performance * 11 / 100);
+  joy = clamp100((int)joy + 20);
   fullness = clamp100((int)fullness + 4 + performance * 16 / 100);
   int burn = (int)weight - performance * 5 / 100;
   weight = burn > 0 ? burn : 0;
@@ -938,11 +939,11 @@ uint8_t Pet::applyMemoResult(uint8_t rounds) {
 }
 
 uint8_t Pet::applyDiglettResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (ceremony != CER_NONE || isEgg() || score == 0) return 0;
   uint8_t performance = minigamePerformance(score, MINIGAME_MAX_DIGLETT);
   uint8_t gain = minigameRewardTier(performance);
   trAtk = clamp100((int)trAtk + gain);
-  joy = clamp100((int)joy + 4 + performance * 11 / 100);
+  joy = clamp100((int)joy + 20);
   energy = dropTo(energy, 5, 8);
   fullness = dropTo(fullness, 2, 5);
   if (performance >= 20) heartUntil = millis() + HEART_MS;
@@ -955,10 +956,10 @@ uint8_t Pet::applyDiglettResult(uint8_t score) {
 }
 
 uint8_t Pet::applyTypeResult(uint8_t score) {
-  if (ceremony != CER_NONE || isEgg()) return 0;
+  if (ceremony != CER_NONE || isEgg() || score == 0) return 0;
   uint8_t performance = minigamePerformance(score, MINIGAME_MAX_MAGIKARP);
   uint8_t gain = minigameRewardTier(performance);
-  joy = clamp100((int)joy + 4 + performance * 11 / 100);
+  joy = clamp100((int)joy + 20);
   energy = clamp100((int)energy + 4 + performance * 14 / 100);
   fullness = dropTo(fullness, 2, 5);
   int burn = (int)weight - performance * 5 / 100;
@@ -1012,13 +1013,23 @@ bool Pet::applyPetEvent(uint8_t eventType) {
   return true;
 }
 
-uint8_t Pet::interactPet(bool eveningBonus) {
+uint8_t Pet::interactPet(bool eveningBonus, uint32_t nowEpoch) {
   if (ceremony != CER_NONE || isEgg() || sleeping) return PET_INTERACT_NONE;
-  uint32_t nowMinute = ageMinutes ? ageMinutes : 1;
-  if (lastPetInteractMinute && nowMinute < lastPetInteractMinute + 10) {
-    heartUntil = millis() + HEART_MS;
+  // Prefer wall-clock minutes so offline/sleep time releases the cooldown even
+  // when age progression is paused or re-anchored. Existing saves used pet-age
+  // minutes in this field; those values naturally look old once a valid RTC is
+  // available. A future value means the clock/age was corrected backwards and
+  // must not lock interaction indefinitely.
+  uint32_t nowMinute = nowEpoch ? nowEpoch / 60UL : (ageMinutes ? ageMinutes : 1UL);
+  if (lastPetInteractMinute && nowMinute >= lastPetInteractMinute &&
+      nowMinute - lastPetInteractMinute < 10UL) {
+    // A rejected touch must not look like a successful caress.  The status
+    // line derives "really likes it" from this timer, so clear any previous
+    // heart feedback before reporting the cooldown.
+    heartUntil = 0;
     return PET_INTERACT_NONE;
   }
+  const uint8_t bondBeforeInteraction = bond;
   lastPetInteractMinute = nowMinute;
   uint8_t result = PET_INTERACT_JOY;
   PetPersonality p = personality();
@@ -1037,6 +1048,9 @@ uint8_t Pet::interactPet(bool eveningBonus) {
   heartUntil = millis() + HEART_MS;
   registerCare();
   noteDailyGoal(DAILY_GOAL_CARE, 1);
+  // registerCare() and a completed daily goal can also raise bond.  Report the
+  // actual result of the whole interaction, not only the personality bonus.
+  if (bond > bondBeforeInteraction) result |= PET_INTERACT_BOND;
   save();
   return result;
 }
@@ -1182,9 +1196,9 @@ void Pet::endWalkPause() {
 
 WalkReward Pet::applyWalkReward(uint16_t steps, uint8_t itemRoll) {
   WalkReward reward;
-  if (steps < 150 || isEgg() || ceremony != CER_NONE) return reward;
+  if (steps == 0 || isEgg() || ceremony != CER_NONE) return reward;
 
-  reward.tier = steps >= 1000 ? 4 : steps >= 600 ? 3 : steps >= 300 ? 2 : 1;
+  reward.tier = steps >= 1000 ? 4 : steps >= 600 ? 3 : steps >= 300 ? 2 : steps >= 150 ? 1 : 0;
   uint32_t rng = (uint32_t)itemRoll + steps * 1103515245UL + 12345UL;
   auto nextRoll = [&]() -> uint8_t {
     rng = rng * 1664525UL + 1013904223UL;
@@ -1202,8 +1216,9 @@ WalkReward Pet::applyWalkReward(uint16_t steps, uint8_t itemRoll) {
     }
   };
 
-  // 누적 보상: 1단계 한 개에 2단계 보상이 차례로 더해진다.
-  addItem((ExpeditionItem)(nextRoll() % 3), true);
+  // 누적 보상: 150보부터 1단계 한 개에 2단계 보상이 차례로 더해진다.
+  // 1~149보는 아이템 없이 유효한 산책으로 처리해 기분만 회복한다.
+  if (reward.tier >= 1) addItem((ExpeditionItem)(nextRoll() % 3), true);
   if (reward.tier >= 2) addItem((ExpeditionItem)(nextRoll() % 4), false);
   if (reward.tier >= 3) addItem((ExpeditionItem)(nextRoll() % 4), false);
 
@@ -1226,7 +1241,7 @@ WalkReward Pet::applyWalkReward(uint16_t steps, uint8_t itemRoll) {
     }
   }
 
-  joy = clamp100((int)joy + reward.tier * 3);
+  joy = clamp100((int)joy + 20);
   addBond(reward.tier > 3 ? 3 : reward.tier);
   registerCare();
   noteDailyGoal(DAILY_GOAL_WALK, steps > 255 ? 255 : (uint8_t)steps);

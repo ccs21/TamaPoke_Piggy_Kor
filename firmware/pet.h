@@ -194,7 +194,7 @@ public:
   uint8_t applyTypeResult(uint8_t score);
   void playWithFriend();
   bool applyPetEvent(uint8_t eventType);
-  uint8_t interactPet(bool eveningBonus);
+  uint8_t interactPet(bool eveningBonus, uint32_t nowEpoch = 0);
   PetPersonality personality() const;
   void ensureDailyGoals();
   uint8_t dailyGoalTarget(uint8_t goalType) const;

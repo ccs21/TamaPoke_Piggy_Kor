@@ -459,6 +459,10 @@ uint32_t petEventFeedbackUntil = 0;
 char petEventMsg[64] = "";
 uint32_t statusNoticeUntil = 0;
 char statusNoticeMsg[64] = "";
+// The CST9217 can briefly report a release and a new press while one finger is
+// still settling.  Only pet caresses need this guard; menu swipes stay fully
+// responsive.
+uint32_t lastPetTapHandledAt = 0;
 
 #define CX 233  // centro de la pantalla redonda
 #define CY 233
@@ -580,6 +584,84 @@ void markUiDirty() {
   battleDirty = true;
   galleryDirty = true;
   powerMenuDirty = true;
+}
+
+bool homeNoticeSceneBlocked() {
+  return screenOff || powerMenuOpen || pairingEventActive || clockOpen ||
+         resetStage != RESET_NONE || communicationState() != COMM_OFF ||
+         gameOpen || walkOpen || battleOpen || cardOpen || hubOpen ||
+         galleryOpen || kbOpen || helpOpen || bathUntil ||
+         pet.awaitingStarter() || pet.isEgg() || pet.sleeping ||
+         pet.sitterActive(pet.lastSeenEpoch) || pet.evolving() || pet.ceremony != CER_NONE;
+}
+
+void clearHomeNotices() {
+  choiceKind = 0;
+  choiceUntil = 0;
+  confirmUntil = 0;
+  wildPromptUntil = 0;
+  friendInviteUntil = 0;
+  friendInviteDex = 0;
+  petEventUntil = 0;
+  petEventFeedbackUntil = 0;
+  feedMenuUntil = 0;
+  gameMenuOpen = false;
+  sleepMenuOpen = false;
+}
+
+// Rendering and input must agree on a single foreground home overlay.
+// Expire timers here as well as in render: a hidden dialog must not retain input.
+void normalizeHomeNotices(uint32_t now) {
+  if (homeNoticeSceneBlocked()) {
+    clearHomeNotices();
+    return;
+  }
+  if (choiceKind && ((int32_t)(now - choiceUntil) >= 0 ||
+      (choiceKind == 1 && !pet.wantEvolveButton()) ||
+      (choiceKind == 2 && !pet.wantFarewellButton()))) {
+    choiceKind = 0;
+    choiceUntil = 0;
+  }
+  if (confirmUntil && (int32_t)(now - confirmUntil) >= 0) confirmUntil = 0;
+  if (wildPromptUntil && (int32_t)(now - wildPromptUntil) >= 0) wildPromptUntil = 0;
+  if (feedMenuUntil && (int32_t)(now - feedMenuUntil) >= 0) feedMenuUntil = 0;
+  if (petEventUntil && (int32_t)(now - petEventUntil) >= 0) petEventUntil = 0;
+  if (choiceKind) {
+    confirmUntil = 0;
+  }
+  if (choiceKind || confirmUntil) {
+    wildPromptUntil = 0;
+    friendInviteUntil = 0;
+    friendInviteDex = 0;
+    sleepMenuOpen = gameMenuOpen = false;
+    feedMenuUntil = 0;
+    petEventUntil = petEventFeedbackUntil = 0;
+  } else if (wildPromptUntil || friendInviteUntil) {
+    if (wildPromptUntil) { friendInviteUntil = 0; friendInviteDex = 0; }
+    sleepMenuOpen = gameMenuOpen = false;
+    feedMenuUntil = 0;
+    petEventUntil = petEventFeedbackUntil = 0;
+  } else if (sleepMenuOpen || gameMenuOpen || feedMenuUntil) {
+    if (sleepMenuOpen) { gameMenuOpen = false; feedMenuUntil = 0; }
+    else if (gameMenuOpen) feedMenuUntil = 0;
+    petEventUntil = petEventFeedbackUntil = 0;
+  }
+}
+
+bool homeNoticeSlotFree() {
+  return !homeNoticeSceneBlocked() && !choiceKind && !confirmUntil &&
+         !wildPromptUntil && !friendInviteUntil && !sleepMenuOpen &&
+         !gameMenuOpen && !feedMenuUntil && !petEventUntil;
+}
+
+void resetTouchGesture(uint32_t now) {
+  wasPressed = false;
+  holdFired = false;
+  holdStart = 0;
+  tStart = now;
+  tX0 = tY0 = tXl = tYl = 0;
+  swallowGesture = true;
+  ignoreTouchUntil = now + 900UL;
 }
 
 // Screen transitions are resolved on finger release, so they do not need an
@@ -934,6 +1016,69 @@ bool beginTouchController() {
   return touchOk;
 }
 
+// Only transport failures count as faults, never an empty touch report.
+uint8_t touchNackCount = 0;
+uint8_t touchRecoveryAttempts = 0;
+uint32_t touchNextHealthAt = 0;
+uint32_t touchSampleCount = 0;
+uint32_t touchPressedCount = 0;
+bool touchOnline = true;
+
+bool probeTouchTransport() {
+  Wire.beginTransmission(0x5A);
+  return Wire.endTransmission() == 0;
+}
+
+bool resumePanelAndTouch() {
+  detachInterrupt(digitalPinToInterrupt(TP_INT));
+  gTouchIrq = false;
+  // SensorLib sleep() changes RST/INT to open drain. Restore the reset output
+  // before pulsing it. On 1.75C the next panel reset also resets touch.
+  pinMode(TP_RESET, OUTPUT);
+  touch.reset();
+  const bool panelOk = panel->begin(80000000);
+  if (!panelOk) Serial.println("TOUCH panel resume failed");
+  delay(150);  // settle after the LAST shared GPIO2 reset, not the first one
+  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
+  touch.setMirrorXY(true, true);
+  pinMode(TP_INT, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
+  resetTouchGesture(millis());
+  touchNackCount = 0;
+  touchOnline = probeTouchTransport();
+  touchNextHealthAt = millis() + (touchOnline ? 5000UL : 300UL);
+  Serial.printf("TOUCH resume ack=%d irq=%d attempts=%u\n",
+                touchOnline, digitalRead(TP_INT), touchRecoveryAttempts);
+  return touchOnline;
+}
+
+void updateTouchHealth(uint32_t now) {
+  if (screenOff || (int32_t)(now - ignoreTouchUntil) < 0 ||
+      (int32_t)(now - touchNextHealthAt) < 0) return;
+  touchOnline = probeTouchTransport();
+  if (touchOnline) {
+    touchNackCount = 0;
+    touchNextHealthAt = now + 5000UL;
+    return;
+  }
+  if (touchNackCount < 3) ++touchNackCount;
+  touchNextHealthAt = now + 300UL;
+  Serial.printf("TOUCH nack count=%u irq=%d menu=%d choice=%u sitter=%d\n",
+                touchNackCount, digitalRead(TP_INT), powerMenuOpen,
+                choiceKind, pet.sitterActive(pet.lastSeenEpoch));
+  if (touchNackCount < 3) return;
+  // Do not reset a shared display during a ceremony, or retry indefinitely.
+  if (touchRecoveryAttempts >= 2 || pairingEventActive || pet.evolving() ||
+      pet.ceremony != CER_NONE || resetStage == RESET_IN_PROGRESS) {
+    touchNextHealthAt = now + 10000UL;
+    return;
+  }
+  ++touchRecoveryAttempts;
+  resumePanelAndTouch();
+  panel->setBrightness(usbPresent() ? 180 : 145);
+  markUiDirty();
+}
+
 enum RestCareResult : uint8_t {
   REST_CARE_DISABLED = 0,
   REST_CARE_STABLE,
@@ -1064,6 +1209,8 @@ void updateScreenOnlyRest(bool eligible) {
 // elapsed. The care call itself is handled separately and may still be shown
 // once immediately after this reset.
 void resetTransientWakeNotices(uint32_t now) {
+  clearHomeNotices();
+  resetTouchGesture(now);
   petEventUntil = 0;
   petEventFeedbackUntil = 0;
   statusNoticeUntil = 0;
@@ -1234,27 +1381,12 @@ void enterDeviceSleep(bool buttonStillHeld) {
                   pet.energy, pet.hygiene);
   }
   pmuEnablePanel();
-#if PANEL_TOUCH_SHARE_RESET
-  // 1.75C: TP_RESET and LCD_RESET share GPIO2. Reset touch first, then panel.
-  touch.reset();
-  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
-  touch.setMirrorXY(true, true);
-  pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
-#endif
-  if (!panel->begin(80000000)) Serial.println("panel wake fallo");
+  touchRecoveryAttempts = 0;
+  resumePanelAndTouch();
   panel->setBrightness(180);
+  sdBegin();
   drawWakeLoader();
   wakeLoaderUntil = millis() + 800UL;
-#if !PANEL_TOUCH_SHARE_RESET
-  // Original 1.75 has independent reset pins, so the panel can wake first.
-  touch.reset();
-  touch.setMaxCoordinates(LCD_WIDTH, LCD_HEIGHT);
-  touch.setMirrorXY(true, true);
-  pinMode(TP_INT, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(TP_INT), touchIsr, FALLING);
-#endif
-  sdBegin();
   audioWake();
 
 #ifndef _WIN32
@@ -1522,17 +1654,25 @@ void loop() {
   updateCommunication(now);
   updatePairingEvent(now);
 
+  normalizeHomeNotices(millis());
+
   // avisa con un sonido cuando el bicho pasa a estar listo para evolucionar
   // (incluye el caso de cumplir al despertar). canEvolveNow es false durmiendo.
   static bool wasEvoReady = false;
-  bool evoReady = pet.wantEvolveButton();
-  if (evoReady && !wasEvoReady) sfxPlay(SFX_MEDAL);
-  wasEvoReady = evoReady;
+  bool evoReady = pet.wantEvolveButton() && !pet.sitterActive(pet.lastSeenEpoch);
+  if (!evoReady) wasEvoReady = false;
+  else if (!wasEvoReady && homeNoticeSlotFree()) {
+    sfxPlay(SFX_MEDAL);
+    wasEvoReady = true;
+  }
   // aviso sombrio cuando el bicho esta a punto de escaparse por abandono
   static bool wasRunReady = false;
-  bool runReady = pet.canRunawayNow();
-  if (runReady && !wasRunReady) sfxPlay(SFX_DENY);
-  wasRunReady = runReady;
+  bool runReady = pet.canRunawayNow() && !pet.sitterActive(pet.lastSeenEpoch);
+  if (!runReady) wasRunReady = false;
+  else if (!wasRunReady && homeNoticeSlotFree()) {
+    sfxPlay(SFX_DENY);
+    wasRunReady = true;
+  }
 
   handleTouch();
   handleSerial();
@@ -1549,7 +1689,7 @@ void loop() {
     int16_t visitor = friendInviteDex;
     friendInviteUntil = 0;
     friendInviteDex = 0;
-    if (visitor > 0) startFriendGameWithDex(visitor);
+    if (visitor > 0 && mainScreenReadyForWild()) startFriendGameWithDex(visitor);
   }
   maybePlayAmbientSound(now);
 
@@ -1739,6 +1879,15 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
 
+  if (line == "TOUCH") {
+    Serial.printf("TOUCH screenOff=%d online=%d irq=%d pending=%d samples=%lu pressed=%lu held=%d swallow=%d ignore=%ld choice=%u powerMenu=%d sitter=%d retries=%u nacks=%u\n",
+                  screenOff, touchOnline, digitalRead(TP_INT), gTouchIrq,
+                  (unsigned long)touchSampleCount, (unsigned long)touchPressedCount,
+                  wasPressed, swallowGesture, (long)((int32_t)(ignoreTouchUntil - millis())),
+                  choiceKind, powerMenuOpen, pet.sitterActive(pet.lastSeenEpoch),
+                  touchRecoveryAttempts, touchNackCount);
+    return;
+  }
   if (line == "PERF") {
     Serial.printf("screen=%s render=%lums max=%lums count=%lu skip=%lu loop=%lums loopMax=%lums interval=%u dirty ui=%d card=%d clock=%d help=%d kb=%d menu=%d battle=%d gallery=%d\n",
                   screenName(),
@@ -1900,8 +2049,11 @@ bool inPetZone(int16_t x, int16_t y) {
 void processTouchSample(bool pressed, int16_t x, int16_t y, uint32_t now);
 
 void handleTouch() {
-  static uint32_t lastPoll = 0;
   uint32_t now = millis();
+  updateTouchHealth(now);
+  now = millis();
+  if (screenOff || !touchOnline) return;
+  static uint32_t lastPoll = 0;
   if (now - lastPoll < (powerSave && screenOff ? 80UL : 20UL)) return;  // 50 Hz activo; menos si pantalla apagada
   lastPoll = millis();
   // solo tocamos el bus si el chip aviso por INT o si el dedo sigue abajo (hay
@@ -1909,9 +2061,11 @@ void handleTouch() {
   // congelaba el loop entero; SensorLib no respeta el timeout de Wire.
   if (!gTouchIrq && !wasPressed && digitalRead(TP_INT) != LOW) return;
   gTouchIrq = false;
-  int16_t x, y;
+  int16_t x = 0, y = 0;
   bool pressed = touch.getPoint(&x, &y, 1) > 0;
-  processTouchSample(pressed, x, y, now);
+  ++touchSampleCount;
+  if (pressed) ++touchPressedCount;
+  processTouchSample(pressed, x, y, millis());
 }
 
 // el toque se resuelve al LEVANTAR el dedo para distinguir tap de deslizar
@@ -1925,7 +2079,7 @@ void processTouchSample(bool pressed, int16_t x, int16_t y, uint32_t now) {
     return;
   }
 
-  if (now < ignoreTouchUntil) {
+  if ((int32_t)(now - ignoreTouchUntil) < 0) {
     // Wake-up suppression must still follow the finger until release.  If we
     // clear wasPressed here, a level-low INT can lose its next falling edge and
     // make the touch panel appear frozen.
@@ -2010,7 +2164,9 @@ void processTouchSample(bool pressed, int16_t x, int16_t y, uint32_t now) {
     tXl = x;
     tYl = y;
     // pulsacion larga sin moverse sobre el bicho -> dialogo de soltar
-    if (!holdFired && !swallowGesture && !powerMenuOpen && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !helpOpen && !sleepMenuOpen &&
+    if (!holdFired && !swallowGesture && homeNoticeSlotFree() &&
+        !pet.wantEvolveButton() && !pet.wantFarewellButton() &&
+        !powerMenuOpen && !galleryOpen && !cardOpen && !kbOpen && !clockOpen && !helpOpen && !sleepMenuOpen &&
         !pet.sitterActive(pet.lastSeenEpoch) && millis() - tStart > 3000 &&
         abs(tXl - tX0) < 30 && abs(tYl - tY0) < 30 && inPetZone(tX0, tY0) &&
         !pet.isEgg() && !confirmUntil && !pet.ceremony) {
@@ -2046,6 +2202,8 @@ void renderHub();
 void updateCommunication(uint32_t now);
 
 void onSwipeV(int dir) {
+  normalizeHomeNotices(millis());
+  if (choiceKind || confirmUntil || friendInviteUntil) return;
   if (pairingEventActive) return;
   if (powerMenuOpen) return;
   if (helpOpen) { helpOpen = false; clockOpen = true; timePanel = TIME_PANEL_SETTINGS; clockDirty = true; lockTouchBrief(); sfxPlay(SFX_TAP); return; }
@@ -2097,6 +2255,8 @@ void onSwipeV(int dir) {
 
 // deslizar: dir +1 = hacia la derecha
 void onSwipe(int dir) {
+  normalizeHomeNotices(millis());
+  if (choiceKind || confirmUntil || friendInviteUntil) return;
   if (pairingEventActive) return;
   if (powerMenuOpen) return;
   if (helpOpen) return;
@@ -2219,6 +2379,7 @@ void startGameMenuChoice(uint8_t idx) {
 }
 
 void onTap(int16_t x, int16_t y) {
+  normalizeHomeNotices(millis());
   if (pairingEventActive) return;
   // Serial.printf("TOUCH %d %d\n", x, y);  // diagnostico (silenciado: satura el log)
   if (powerMenuOpen) {
@@ -2422,7 +2583,11 @@ void onTap(int16_t x, int16_t y) {
       if (b1) pet.startFarewell();
       else if (b2) pet.declineFarewell(rtcEpoch());
     }
-    choiceKind = 0;
+    if (b1 || b2) {
+      choiceKind = 0;
+      choiceUntil = 0;
+      markUiDirty();
+    }
     return;
   }
   if (confirmUntil) {        // dialogo "soltar?": SI / NO
@@ -2457,13 +2622,13 @@ void onTap(int16_t x, int16_t y) {
     return;
   }
   // boton de evolucion: abre el dialogo evolucionar/mantener
-  if (pet.wantEvolveButton() && x >= EVO_BTN_X && x <= EVO_BTN_X + EVO_BTN_W &&
+  if (homeNoticeSlotFree() && pet.wantEvolveButton() && x >= EVO_BTN_X && x <= EVO_BTN_X + EVO_BTN_W &&
       y >= EVO_BTN_Y && y <= EVO_BTN_Y + EVO_BTN_H) {
     choiceKind = 1; choiceUntil = millis() + 12000;
     return;
   }
   // botones de final (mismo recuadro): escapada directa; despedida abre dialogo
-  if (x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
+  if (homeNoticeSlotFree() && x >= FAR_BTN_X && x <= FAR_BTN_X + FAR_BTN_W &&
       y >= FAR_BTN_Y && y <= FAR_BTN_Y + FAR_BTN_H) {
     if (pet.canRunawayNow()) { pet.startRunaway(); return; }
     if (pet.wantFarewellButton()) { choiceKind = 2; choiceUntil = millis() + 12000; return; }
@@ -2495,15 +2660,34 @@ void onTap(int16_t x, int16_t y) {
   }
   // tocar al bicho = caricia
   if (inPetZone(x, y)) {
+    const uint32_t now = millis();
+    if (lastPetTapHandledAt && now - lastPetTapHandledAt < 300UL) return;
+    lastPetTapHandledAt = now;
     Serial.println("PET");
-    uint8_t r = pet.interactPet(currentDayPhase() == 2);
-    StrId msg = S_WAIT;
-    if (r & PET_INTERACT_BOND) msg = S_BOND_GAIN;
-    else if (r & PET_INTERACT_JOY) msg = S_HAPPY_FB;
-    snprintf(petEventMsg, sizeof(petEventMsg), "%s", T(msg));
-    petEventFeedbackUntil = millis() + 1600;
-    if (!pet.sleeping) sfxPlay((r & PET_INTERACT_BOND) ? SFX_HEART : SFX_TAP);
+    const uint8_t bondBefore = pet.bond;
+    const uint32_t wallEpoch = rtcEpoch();
+    const uint32_t previousInteractMinute = pet.lastPetInteractMinute;
+    uint8_t r = pet.interactPet(currentDayPhase() == 2, wallEpoch);
+    const uint8_t bondGain = pet.bond > bondBefore ? pet.bond - bondBefore : 0;
+    Serial.printf("PET result=%u epochMin=%lu previousMin=%lu bond=%u->%u\n",
+                  r, (unsigned long)(wallEpoch / 60UL),
+                  (unsigned long)previousInteractMinute, bondBefore, pet.bond);
+
+    // Use one feedback channel only.  Previously the heart changed the header
+    // to "really likes it" while an independent orange line could say "wait".
+    petEventFeedbackUntil = 0;
+    petEventMsg[0] = 0;
+    if (r == PET_INTERACT_NONE) {
+      snprintf(statusNoticeMsg, sizeof(statusNoticeMsg), "%s", T(S_WAIT));
+    } else if (bondGain) {
+      snprintf(statusNoticeMsg, sizeof(statusNoticeMsg), T(S_BOND_GAIN), bondGain);
+    } else {
+      snprintf(statusNoticeMsg, sizeof(statusNoticeMsg), "%s", T(S_HAPPY_FB));
+    }
+    statusNoticeUntil = now + 1600UL;
+    if (!pet.sleeping) sfxPlay(bondGain ? SFX_HEART : SFX_TAP);
     if (r != PET_INTERACT_NONE && audioMode() == SOUND_FULL) speciesChirpPlay(pet.speciesId);
+    return;
   }
 }
 
@@ -2721,6 +2905,7 @@ void drawSitterScene() {
 }
 
 void render() {
+  normalizeHomeNotices(millis());
   if (wakeLoaderUntil) {
     if ((int32_t)(wakeLoaderUntil - millis()) > 0) return;
     wakeLoaderUntil = 0;
@@ -2832,9 +3017,11 @@ void render() {
     drawPetEvent();
     if (gameMenuOpen) drawGameMenu();
     if (sleepMenuOpen) drawSleepMenu();
-    if (pet.wantEvolveButton()) drawEvolveButton();        // CTA rojo: evolucionar
-    else if (pet.canRunawayNow()) drawRunawayButton();     // CTA sombrio: escapada (abandono)
-    else if (pet.wantFarewellButton()) drawFarewellButton();  // CTA dorado: despedida
+    if (homeNoticeSlotFree()) {
+      if (pet.wantEvolveButton()) drawEvolveButton();
+      else if (pet.canRunawayNow()) drawRunawayButton();
+      else if (pet.wantFarewellButton()) drawFarewellButton();
+    }
   }
 
   if (pet.sleeping) {
@@ -3035,7 +3222,7 @@ void finishActivityGame() {
     gameGain = 0;
   }
   gameOverUntil = millis() + 4000UL;
-  minigameSfxPlay(gameNewHi && gameScore ? SFX_MEDAL : SFX_LEVEL);
+  if (gameScore) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
 }
 
 uint32_t activityDelta(uint32_t now) {
@@ -3094,9 +3281,11 @@ void drawActivityHeader(const char *title, uint16_t record, uint32_t now) {
   snprintf(score, sizeof(score), T(S_SCORE_FMT), gameScore);
   snprintf(rec, sizeof(rec), T(S_REC_FMT), record);
   gfx->setTextSize(2);
-  gfx->setCursor(58, 66);
+  // Keep both labels inside the circular safe area and center them over each
+  // half of the playfield.  A fixed x=58 clipped the score on the AMOLED.
+  gfx->setCursor(134 - gfx->textWidth(score) / 2, 66);
   gfx->print(score);
-  gfx->setCursor(300, 66);
+  gfx->setCursor(332 - gfx->textWidth(rec) / 2, 66);
   gfx->print(rec);
   int bw = 286;
   uint32_t left = miniUntil > now ? miniUntil - now : 0;
@@ -3132,9 +3321,10 @@ void drawActivityResult(uint16_t record, const char *rewardText) {
     gfx->setCursor(CX - gfx->textWidth(T(S_NEW_RECORD)) / 2, 239);
     gfx->print(T(S_NEW_RECORD));
   }
-  gfx->setTextColor(ink);
-  gfx->setCursor(CX - gfx->textWidth(rewardText) / 2, 278);
-  gfx->print(rewardText);
+  const char *resultText = gameScore ? rewardText : "0점 - 보상 X";
+  gfx->setTextColor(gameScore ? ink : UI_BAR_BAD);
+  gfx->setCursor(CX - gfx->textWidth(resultText) / 2, 278);
+  gfx->print(resultText);
   if (gameGain) {
     char gain[18];
     snprintf(gain, sizeof(gain), "+%u", gameGain);
@@ -3223,7 +3413,10 @@ void renderRunnerGame() {
       for (auto &obstacle : runnerObstacles) if (!obstacle.active) {
         obstacle.active = true;
         obstacle.x = 28;
-        obstacle.lane = (uint8_t)random(3);
+        // Half of each wave actively challenges the lane Pikachu currently
+        // occupies.  The other half stays fully random, preserving variety
+        // without allowing long stretches of effortless idle scoring.
+        obstacle.lane = random(100) < 50 ? runnerLane : (uint8_t)random(3);
         uint32_t gap = 1250UL + random(500);
         uint32_t cut = gameScore * 28UL;
         uint32_t plannedGap = gap > cut ? gap - cut : 0;
@@ -3693,7 +3886,8 @@ int16_t pickKnownFriend() {
 }
 
 void startFriendGameWithDex(int16_t visitor) {
-  if (pet.isEgg() || pet.sleeping || pet.ceremony || !pet.friendPlayUnlocked()) {
+  if (!homeNoticeSlotFree() || !pet.friendPlayUnlocked() ||
+      pet.wantEvolveButton() || pet.wantFarewellButton() || pet.canRunawayNow()) {
     minigameSfxPlay(SFX_DENY);
     return;
   }
@@ -3757,7 +3951,7 @@ void gameTap(int16_t x, int16_t y) {
 void finishCatchGame() {
   gameNewHi = (gameScore > pet.catchHi);
   gameGain = pet.applyCatchResult(gameScore);
-  minigameSfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+  if (gameScore) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
   gameOverUntil = millis() + 4000;
 }
 
@@ -3783,7 +3977,7 @@ void finishMemoGame() {
   gameScore = memoRounds;
   gameNewHi = (memoRounds > pet.memoHi);
   gameGain = pet.applyMemoResult(memoRounds);
-  minigameSfxPlay(gameNewHi && memoRounds > 0 ? SFX_MEDAL : SFX_LEVEL);
+  if (memoRounds) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
   gameOverUntil = millis() + 4000;
 }
 
@@ -3832,7 +4026,7 @@ void finishDiglettGame() {
   gameNewHi = (gameScore > pet.diglettHi);
   gameGain = pet.applyDiglettResult(gameScore);
   clearDiglettWave();
-  minigameSfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+  if (gameScore) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
   gameOverUntil = millis() + 4000;
 }
 
@@ -3898,7 +4092,7 @@ void diglettTap(int16_t x, int16_t y) {
 void finishTypeGame() {
   gameNewHi = (gameScore > pet.typeHi);
   gameGain = pet.applyTypeResult(gameScore);
-  minigameSfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+  if (gameScore) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
   gameOverUntil = millis() + 4000;
 }
 
@@ -3950,7 +4144,7 @@ void stepGame() {
     if (++gameMisses >= 3) {
       gameNewHi = (gameScore > pet.gameHi);
       pet.playResult(gameScore);  // actualiza el record y da felicidad
-  minigameSfxPlay(gameNewHi && gameScore > 0 ? SFX_MEDAL : SFX_LEVEL);
+  if (gameScore) minigameSfxPlay(gameNewHi ? SFX_MEDAL : SFX_LEVEL);
       gameOverUntil = millis() + 4000;
     } else {
       respawnBall();
@@ -4089,10 +4283,16 @@ void renderWalk() {
       gfx->setCursor(142, y);
       gfx->print(reward);
     }
+  } else if (walkSteps > 0) {
+    gfx->setTextColor(UI_BAR_WARN);
+    gfx->setTextSize(2);
+    const char *joy = "기분 +20";
+    gfx->setCursor(CX - gfx->textWidth(joy) / 2, 238);
+    gfx->print(joy);
   } else {
     gfx->setTextColor(UI_BAR_BAD);
     gfx->setTextSize(2);
-    const char *none = T(S_WALK_NO_REWARD);
+    const char *none = "0걸음 - 보상 X";
     gfx->setCursor(CX - gfx->textWidth(none) / 2, 238);
     gfx->print(none);
   }
@@ -4143,8 +4343,11 @@ void drawGameResult(const char *recordFmt, uint16_t record, StrId gainFmt) {
   gfx->setCursor(CX - gfx->textWidth(buf) / 2, 148);
   gfx->print(buf);
   char gain[18];
-  snprintf(gain, sizeof(gain), T(gainFmt), gameGain);
-  gfx->setTextColor(gainFmt == S_DEF_GAIN_FMT ? 0x4C98 : (gainFmt == S_HYG_GAIN_FMT ? UI_BAR_OK : UI_BAR_WARN));
+  if (gameScore) snprintf(gain, sizeof(gain), T(gainFmt), gameGain);
+  else snprintf(gain, sizeof(gain), "0점 - 보상 X");
+  gfx->setTextColor(gameScore ?
+                    (gainFmt == S_DEF_GAIN_FMT ? 0x4C98 : (gainFmt == S_HYG_GAIN_FMT ? UI_BAR_OK : UI_BAR_WARN)) :
+                    UI_BAR_BAD);
   gfx->setTextSize(3);
   gfx->setCursor(CX - gfx->textWidth(gain) / 2, 204);
   gfx->print(gain);
@@ -4191,13 +4394,13 @@ void renderCatchGame() {
   snprintf(score, sizeof(score), T(S_SCORE_FMT), gameScore);
   snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.catchHi);
   gfx->setTextSize(2);
-  gfx->setCursor(50, 78);
+  gfx->setCursor(134 - gfx->textWidth(score) / 2, 78);
   gfx->print(score);
-  gfx->setCursor(294, 78);
+  gfx->setCursor(332 - gfx->textWidth(rec) / 2, 78);
   gfx->print(rec);
   for (int i = 0; i < 3; i++) {
-    if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
-    else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
+    if (i < 3 - gameMisses) gfx->fillCircle(205 + i * 28, 104, 6, UI_BAR_BAD);
+    else gfx->drawCircle(205 + i * 28, 104, 6, UI_TRACK);
   }
   const char *const *icon = catchIcon == 0 ? SPR_ICON_FOOD : (catchIcon == 1 ? SPR_ICON_BERRY_B : SPR_ICON_BERRY_G);
   gfx->fillCircle(catchX, catchY, 34, UI_WHITE);
@@ -4325,13 +4528,13 @@ void renderDiglettGame() {
   snprintf(score, sizeof(score), T(S_SCORE_FMT), gameScore);
   snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.diglettHi);
   gfx->setTextSize(2);
-  gfx->setCursor(50, 78);
+  gfx->setCursor(134 - gfx->textWidth(score) / 2, 78);
   gfx->print(score);
-  gfx->setCursor(294, 78);
+  gfx->setCursor(332 - gfx->textWidth(rec) / 2, 78);
   gfx->print(rec);
   for (int i = 0; i < 3; i++) {
-    if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
-    else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
+    if (i < 3 - gameMisses) gfx->fillCircle(205 + i * 28, 104, 6, UI_BAR_BAD);
+    else gfx->drawCircle(205 + i * 28, 104, 6, UI_TRACK);
   }
   // The empty hole is a separate user-supplied asset; D01-D04 are animation.
   for (int8_t cell = 0; cell < 16; cell++) {
@@ -4396,13 +4599,13 @@ void renderTypeGame() {
   snprintf(score, sizeof(score), T(S_SCORE_FMT), gameScore);
   snprintf(rec, sizeof(rec), T(S_REC_FMT), pet.typeHi);
   gfx->setTextSize(2);
-  gfx->setCursor(50, 78);
+  gfx->setCursor(134 - gfx->textWidth(score) / 2, 78);
   gfx->print(score);
-  gfx->setCursor(294, 78);
+  gfx->setCursor(332 - gfx->textWidth(rec) / 2, 78);
   gfx->print(rec);
   for (int i = 0; i < 3; i++) {
-    if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
-    else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
+    if (i < 3 - gameMisses) gfx->fillCircle(205 + i * 28, 104, 6, UI_BAR_BAD);
+    else gfx->drawCircle(205 + i * 28, 104, 6, UI_TRACK);
   }
 
   const char *enemy = battleTypeName(typeEnemy);
@@ -4648,8 +4851,8 @@ void renderGame() {
   gfx->setCursor(CX - gfx->textWidth(rec) / 2, 76);
   gfx->print(rec);
   for (int i = 0; i < 3; i++) {
-    if (i < 3 - gameMisses) gfx->fillCircle(180 + i * 28, 104, 6, UI_BAR_BAD);
-    else gfx->drawCircle(180 + i * 28, 104, 6, UI_TRACK);
+    if (i < 3 - gameMisses) gfx->fillCircle(205 + i * 28, 104, 6, UI_BAR_BAD);
+    else gfx->drawCircle(205 + i * 28, 104, 6, UI_TRACK);
   }
 
   if (pmd.loaded) {
@@ -4720,6 +4923,7 @@ void scheduleNextWild(uint32_t now) {
 }
 
 bool mainScreenReadyForWild() {
+  if (!homeNoticeSlotFree() || wasPressed) return false;
   if (screenOff || pet.awaitingStarter() || pet.isEgg() || pet.sleeping || pet.ceremony ||
       pet.sitterActive(pet.lastSeenEpoch)) return false;
   if (communicationState() != COMM_OFF || battleOpen || gameOpen || gameMenuOpen ||
@@ -4776,6 +4980,7 @@ void scheduleNextPetEvent(uint32_t now) {
 }
 
 bool mainScreenReadyForPetEvent() {
+  if (!homeNoticeSlotFree() || wasPressed) return false;
   if (screenOff || pet.awaitingStarter() || pet.isEgg() || pet.sleeping || pet.ceremony) return false;
   if (battleOpen || gameOpen || gameMenuOpen || cardOpen || galleryOpen || kbOpen || clockOpen || helpOpen) return false;
   if (feedMenuUntil || confirmUntil || choiceKind || bathUntil || wildPromptUntil || friendInviteUntil) return false;
@@ -6301,16 +6506,16 @@ void renderBattle() {
   snprintf(rightLv, sizeof(rightLv), "Lv.%u", battleLevel);
   gfx->setTextSize(1);
   gfx->setTextColor(ink);
-  gfx->setCursor(58, 132);
+  // Type badges may occupy most of the row for dual-type Pokemon.  Put both
+  // levels on their own symmetric row instead of competing for that width.
+  gfx->setCursor(58, 154);
   gfx->print(leftLv);
-  // 왼쪽은 레벨을 바깥쪽에 두고 타입을 중앙 쪽 끝(HP 바의 오른쪽)에
-  // 맞춘다. 오른쪽의 타입 -> 레벨 배치와 정확히 대칭이며 Lv.100처럼
-  // 글자가 길어져도 단일 타입 배지와 겹치지 않는다.
+  // 왼쪽 타입은 HP 바의 중앙 쪽 끝에 맞춰 오른쪽 배치와 대칭을 이룬다.
   drawTypeChips(204, 128, mine, true);
   drawTypeChips(262, 128, wild, false);
   gfx->setTextSize(1);
   gfx->setTextColor(ink);
-  gfx->setCursor(408 - gfx->textWidth(rightLv), 132);
+  gfx->setCursor(408 - gfx->textWidth(rightLv), 154);
   gfx->print(rightLv);
   gfx->setTextSize(2);
 
@@ -9564,13 +9769,26 @@ uint8_t pmdFrameAt(const PmdAct &a, uint32_t t, bool loop) {
 
 // dibuja una accion anclada por la base (centro-x, suelo) y devuelve su escala
 // dibuja una accion de un PmdMon concreto (m); drawPmdAct usa el global pmd
-void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+uint8_t pmdActScaleM(PmdMon &m, uint8_t actId, uint8_t maxS,
+                     uint8_t minVisibleHeight) {
   const PmdAct &a = m.acts[actId];
-  if (!a.frames) return;
+  if (!a.frames) return 0;
   uint8_t sBase = m.acts[PMD_IDLE].h ? 170 / m.acts[PMD_IDLE].h : 5;
   if (sBase < 2) sBase = 2;
   if (sBase > maxS) sBase = maxS;
   uint8_t s = sBase;
+  // The main care scene should compare the Pokemon itself, not the transparent
+  // animation canvas.  Raise only sprites whose visible idle pixels would be
+  // shorter than the requested floor; other screens pass zero and retain their
+  // established battle/gallery/minigame scale.
+  if (minVisibleHeight) {
+    const PmdAct &idle = m.acts[PMD_IDLE];
+    uint8_t idleVisibleH = 0;
+    for (uint8_t i = 0; i < idle.frames; i++)
+      if (idle.frame[i].h > idleVisibleH) idleVisibleH = idle.frame[i].h;
+    while (idleVisibleH && s < maxS &&
+           (uint16_t)idleVisibleH * s < minVisibleHeight) s++;
+  }
   // TPK3 actions share a movement canvas that can be much larger than the
   // visible cropped frames. Mr. Mime's attack canvas is 72x88 while the actor
   // itself is only about 21x28; scaling by the transparent canvas made it
@@ -9583,6 +9801,15 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   }
   while (s > 2 && ((uint16_t)visibleH * s > 250 ||
                     (uint16_t)visibleW * s > 250)) s--;
+  return s;
+}
+
+void drawPmdActMinVisibleM(PmdMon &m, uint8_t actId, int cx, int groundY,
+                           uint32_t t, bool loop, bool sil, uint8_t maxS,
+                           uint8_t minVisibleHeight) {
+  const PmdAct &a = m.acts[actId];
+  uint8_t s = pmdActScaleM(m, actId, maxS, minVisibleHeight);
+  if (!s) return;
   uint8_t fi = pmdFrameAt(a, t, loop);
   const PmdFrame &fr = a.frame[fi];
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
@@ -9597,6 +9824,9 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
       gfx->fillRect(x0 + c * s, y0 + r * s, s, s, sil ? INK_K : m.pal[idx]);
     }
   }
+}
+void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
+  drawPmdActMinVisibleM(m, actId, cx, groundY, t, loop, sil, maxS, 0);
 }
 void drawPmdAct(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t maxS) {
   drawPmdActM(pmd, actId, cx, groundY, t, loop, sil, maxS);
@@ -9701,7 +9931,13 @@ void drawPetPMD() {
     if (!pmd.has(act)) act = PMD_IDLE;
   }
 
-  drawPmdAct(act, (int)beh.x, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
+  // Normalize transparent padding first, then render the whole raised Pokemon
+  // at 70% of that size.  This keeps Pikachu and other compact species mutually
+  // consistent while leaving Chansey visibly larger in the sitter scene.
+  uint8_t careScale = pmdActScaleM(pmd, act, 5, 90);
+  if (careScale)
+    drawPmdActRatioM(pmd, act, (int)beh.x, PET_GROUND, now - beh.t0,
+                     loop || act == PMD_IDLE, careScale * 7, 10);
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, (int)beh.x + 50, PET_GROUND - 190, 2, false);
 }
