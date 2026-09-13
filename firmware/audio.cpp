@@ -35,7 +35,7 @@ static volatile uint8_t gBgmRequested = BGM_NONE;
 static uint8_t gBgmActive = BGM_NONE;
 static AdpcmClip gBgmClip;
 static uint8_t gPlaybackScalePct = 100;
-static uint32_t gLastQueuedAt[4] = {0, 0, 0, 0};
+
 static uint32_t gLastChirpAt = 0;
 static uint32_t gLastMinigameChirpAt = 0;
 static uint32_t gLastCareAlertAt = 0;
@@ -226,51 +226,7 @@ static const SfxDef SFX[SFX_COUNT] = {
   {N_DIGLETT_HIT, 3}, {N_DIGLETT_MISS, 3}, {N_EEVEE_FRUIT, 3},
 };
 
-static const uint8_t SFX_MIN_MODE[SFX_COUNT] = {
-  SOUND_FULL, // TAP: nur "viel"
-  SOUND_MED,  // EAT
-  SOUND_FULL, // PLAY: kleine Punkte/Klicks nur "viel"
-  SOUND_MED,  // HEART
-  SOUND_LOW,  // HATCH: grosses Ereignis
-  SOUND_LOW,  // EVOLVE
-  SOUND_LOW,  // MEDAL
-  SOUND_LOW,  // DENY: wichtiges Feedback auch bei wenig
-  SOUND_LOW,  // BYE
-  SOUND_LOW,  // LEVEL
-  SOUND_LOW,  // BATTLE_WIN
-  SOUND_LOW,  // BATTLE_LOSS
-  SOUND_LOW,  // CATCH_OK
-  SOUND_LOW,  // CATCH_FAIL
-  SOUND_LOW,  // CAPTURE_SHAKE: three audible ball locks
-  SOUND_LOW,  // DAILY_GOAL
-  SOUND_MED,  // EVENT_SPARKLE
-  SOUND_MED,  // REST
-  SOUND_MED,  // COUNTER
-  SOUND_FULL, // MENU
-  SOUND_MED,  // GAME_START
-  SOUND_FULL, // BALL_BOUNCE
-  SOUND_FULL, // BALL_MISS
-  SOUND_FULL, // MEMO_STEP
-  SOUND_FULL, // MEMO_PAD_0
-  SOUND_FULL, // MEMO_PAD_1
-  SOUND_FULL, // MEMO_PAD_2
-  SOUND_FULL, // MEMO_PAD_3
-  SOUND_FULL, // ATTACK_QUICK
-  SOUND_FULL, // ATTACK_HEAVY
-  SOUND_FULL, // ENEMY_HIT
-  SOUND_MED,  // EFFECTIVE
-  SOUND_FULL, // WEAK_HIT
-  SOUND_MED,  // MINIGAME_OK
-  SOUND_MED,  // MINIGAME_BAD
-  SOUND_LOW,  // LOW_HP
-  SOUND_MED,  // EXPEDITION_START
-  SOUND_LOW,  // EXPEDITION_FOUND
-  SOUND_MED,  // EXPEDITION_CLAIM
-  SOUND_MED,  // ITEM_USE
-  SOUND_MED,  // DIGLETT_HIT
-  SOUND_MED,  // DIGLETT_MISS
-  SOUND_MED,  // EEVEE_FRUIT
-};
+// Sound modes change gain only. Every cue is enabled unless SOUND_OFF.
 
 static int16_t buf[256 * 2];  // estéreo intercalado (L=R)
 
@@ -308,11 +264,9 @@ static uint8_t modeGainPct() {
 }
 
 static bool criticalSfx(uint8_t id) {
-  // Diglett taps need immediate one-to-one feedback even in MED mode. They
-  // remain muted in LOW/OFF through SFX_MIN_MODE, but bypass repeat thinning.
-  return id < SFX_COUNT &&
-         (SFX_MIN_MODE[id] == SOUND_LOW || id == SFX_DIGLETT_HIT ||
-          id == SFX_DIGLETT_MISS || id == SFX_EEVEE_FRUIT);
+  return id == SFX_DIGLETT_HIT || id == SFX_DIGLETT_MISS ||
+         id == SFX_EEVEE_FRUIT || id == SFX_CAPTURE_SHAKE ||
+         id == SFX_EVOLVE || id == SFX_CATCH_OK || id == SFX_BYE;
 }
 
 static const char *backgroundPath(uint8_t kind) {
@@ -667,7 +621,7 @@ static void audioTask(void *) {
                   event.kind == AUDIO_EVENT_MINIGAME_SFX) &&
                  event.value < SFX_COUNT;
     bool isChirp = event.value >= 1 && event.value <= 151 &&
-                   ((event.kind == AUDIO_EVENT_CHIRP && gMode >= SOUND_MED) ||
+                   ((event.kind == AUDIO_EVENT_CHIRP && gMode != SOUND_OFF) ||
                     (event.kind == AUDIO_EVENT_MINIGAME_CHIRP && gMode != SOUND_OFF) ||
                     (event.kind == AUDIO_EVENT_CARE_CHIRP && gMode != SOUND_OFF));
     bool isPikachu = event.kind == AUDIO_EVENT_PIKACHU && gMode != SOUND_OFF;
@@ -675,7 +629,7 @@ static void audioTask(void *) {
     bool isPairingMusic = event.kind == AUDIO_EVENT_PAIRING_MUSIC && gMode != SOUND_OFF;
     const bool needsI2sWarmup = isChirp ||
                                 (isSfx && event.value == SFX_EVOLVE);
-    if (isSfx && gMode < SFX_MIN_MODE[event.value]) continue;
+    if (gMode == SOUND_OFF) continue;
     if (isSfx || isChirp || isPikachu || isCareAlert || isPairingMusic) {
       gBusy = true;
       gPlaybackScalePct = isMinigame ? 70 : 100;
@@ -726,7 +680,7 @@ static void audioTask(void *) {
         playPikachuReveal();
       }
       if (!gAwakeAmpHeld && !gMinigameAmpHeld) {
-        delay(gMode == SOUND_FULL ? 90 : 60);  // deja salir la cola del DMA antes de cortar
+        delay(90);  // Same DMA tail at every audible volume.
         digitalWrite(PA, LOW);                 // apaga el amp entre sonidos (evita siseo)
       }
       gPlaybackScalePct = 100;
@@ -831,26 +785,18 @@ void audioWake() {
 static bool queueSfx(uint8_t id, uint8_t eventKind) {
   // Silencio voluntario o hardware no disponible no debe bloquear las
   // animaciones que esperan a que aceptemos el evento.
-  if (gMode == SOUND_OFF || id >= SFX_COUNT || gMode < SFX_MIN_MODE[id]) return true;
+  if (gMode == SOUND_OFF || id >= SFX_COUNT) return true;
   if (!gReady || !gQ) return true;
 
-  // Die Modi sollen sich spuerbar anfuehlen: "viel" spielt alles, "mittel"
-  // laesst schnelle Wiederholungen etwas aus, "wenig" bleibt bei grossen
-  // Ereignissen und klaren Warnungen.
-  uint32_t now = millis();
-  if (gMode == SOUND_MED && !criticalSfx(id)) {
-    if (now - gLastQueuedAt[gMode] < 180UL) return false;
-  } else if (gMode == SOUND_LOW) {
-    if (now - gLastQueuedAt[gMode] < 650UL && !criticalSfx(id)) return false;
-  }
+  // Volume must not discard or thin out game feedback.
   AudioEvent event = { eventKind, id };
   // Los sonidos importantes (incluido cada cierre de la Pokeball) esperan un
   // poco por la cola. Si aun asi esta llena, el llamador puede reintentarlos.
   TickType_t wait = criticalSfx(id) ? pdMS_TO_TICKS(120)
-                                    : (gMode == SOUND_FULL ? pdMS_TO_TICKS(28) : 0);
+                                    : (pdMS_TO_TICKS(28));
   if (xQueueSend(gQ, &event, wait) != pdTRUE) return false;
   if (gAudioTaskHandle) xTaskNotifyGive(gAudioTaskHandle);
-  gLastQueuedAt[gMode] = now;
+
   return true;
 }
 
@@ -917,18 +863,24 @@ void audioSetMode(uint8_t mode) {
 
 uint8_t audioMode() { return gMode; }
 
+uint8_t audioDiagnosticFlags() {
+  return (gReady ? 1 : 0) | (gBusy ? 2 : 0) |
+         (gAwakeAmpHeld ? 4 : 0) | (gMinigameAmpHeld ? 8 : 0) |
+         (gBgmActive != BGM_NONE ? 16 : 0);
+}
+
 bool audioBusy() {
   return gBusy || (gQ && uxQueueMessagesWaiting(gQ) > 0) ||
          (gSnorlaxHitQ && uxQueueMessagesWaiting(gSnorlaxHitQ) > 0);
 }
 
 void speciesChirpPlay(int16_t dex) {
-  if (!gReady || !gQ || gMode < SOUND_MED || dex < 1 || dex > 151) return;
+  if (!gReady || !gQ || gMode == SOUND_OFF || dex < 1 || dex > 151) return;
   uint32_t now = millis();
   if (now - gLastChirpAt < 800UL) return;
   gLastChirpAt = now;
   AudioEvent event = { AUDIO_EVENT_CHIRP, (uint8_t)dex };
-  if (xQueueSend(gQ, &event, gMode == SOUND_FULL ? pdMS_TO_TICKS(28) : 0) == pdTRUE &&
+  if (xQueueSend(gQ, &event, pdMS_TO_TICKS(28)) == pdTRUE &&
       gAudioTaskHandle) xTaskNotifyGive(gAudioTaskHandle);
 }
 
@@ -938,7 +890,7 @@ void minigameSpeciesChirpPlay(int16_t dex) {
   if (gLastMinigameChirpAt && now - gLastMinigameChirpAt < 500UL) return;
   gLastMinigameChirpAt = now;
   AudioEvent event = { AUDIO_EVENT_MINIGAME_CHIRP, (uint8_t)dex };
-  if (xQueueSend(gQ, &event, gMode == SOUND_FULL ? pdMS_TO_TICKS(28) : 0) == pdTRUE &&
+  if (xQueueSend(gQ, &event, pdMS_TO_TICKS(28)) == pdTRUE &&
       gAudioTaskHandle) xTaskNotifyGive(gAudioTaskHandle);
 }
 

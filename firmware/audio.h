@@ -77,6 +77,7 @@ bool audioEnabled();
 void audioSetMode(uint8_t mode);
 uint8_t audioMode();
 bool audioBusy();
+uint8_t audioDiagnosticFlags(); // bit0 ready, bit1 busy, bit2 awake hold, bit3 activity hold, bit4 BGM
 void speciesChirpPlay(int16_t dex);  // eigener, synthetisierter Spezies-Chirp
 void careAlertSoundPlay();            // llamada critica PCM: suena salvo en SOUND_OFF
 void careAlertChirpPlay(int16_t dex); // compatibilidad: redirige a careAlertSoundPlay

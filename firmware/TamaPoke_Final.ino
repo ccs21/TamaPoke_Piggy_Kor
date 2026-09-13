@@ -25,6 +25,7 @@
 #include "pet.h"
 #include "sdmon.h"
 #include "rtcbat.h"
+#include "power_log.h"
 #include "i18n.h"
 #include "audio.h"
 #include "battle.h"
@@ -37,7 +38,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION_BASE "1.48.0-ko"
+#define FW_VERSION_BASE "1.48.4-ko"
 #if TAMAPOKE_BOARD_175C
   #define FW_VERSION FW_VERSION_BASE "-175c"
 #else
@@ -822,12 +823,20 @@ bool activeWalkSession() {
   return walkOpen && !walkFinished && walkSensorActive();
 }
 
+void logPower(const char *event) {
+#ifndef _WIN32
+  powerLogRecord(event, screenName(), screenOff, walkScreenRest,
+                 walkSensorActive(), batPercent(), usbPresent());
+#endif
+}
+
 void enterWalkScreenRest() {
   if (walkScreenRest || !activeWalkSession()) return;
   panel->setBrightness(0);
   panel->displayOff();
   audioPrepareSleep();
   walkScreenRest = true;
+  logPower("walk-rest");
   Serial.printf("WALK screen rest steps=%u elapsed=%lus\n", walkSteps,
                 (unsigned long)walkElapsedSeconds(rtcEpoch()));
 }
@@ -837,6 +846,7 @@ void exitWalkScreenRest() {
   panel->displayOn();
   audioWake();
   walkScreenRest = false;
+  logPower("walk-resume");
   markUiDirty();
 }
 
@@ -972,6 +982,7 @@ void performPowerOff() {
   delay(120);
 
   Serial.println("POWER OFF");
+  logPower("shutdown");
   Serial.flush();
   if (!pwrShutdown()) {
     // This is only a defensive path for an unavailable AXP2101. A normal
@@ -1290,6 +1301,7 @@ void enterDeviceSleep(bool buttonStillHeld) {
   pmuDisablePanel();
 
   bool waitForRelease = buttonStillHeld;
+  logPower("sleep-enter");
   bool wakeForCare = false;
   bool wakeForWalkComplete = false;
   bool wakeForPwr = false;
@@ -1301,7 +1313,10 @@ void enterDeviceSleep(bool buttonStillHeld) {
     // device sleep efficient without losing a short press. Active walks never
     // enter this function; their screen-only rest keeps the pedometer loop up.
     esp_sleep_enable_timer_wakeup(1000000ULL);
-    esp_light_sleep_start();
+    const uint64_t powerSleepStartUs = esp_timer_get_time();
+    const int powerSleepError = esp_light_sleep_start();
+    powerLogSleepResult((uint64_t)esp_timer_get_time() - powerSleepStartUs,
+                        powerSleepError, (int)esp_sleep_get_wakeup_cause());
 
     uint8_t power = pwrEvents();
     if (waitForRelease) {
@@ -1356,6 +1371,7 @@ void enterDeviceSleep(bool buttonStillHeld) {
                     pet.energy, pet.hygiene);
     }
 
+    logPower("sleep-check");
     if (!pet.tamagotchiModeEnabled()) continue;
 
     const uint8_t result = evaluateRestCare(checkEpoch, "device-sleep");
@@ -1366,6 +1382,7 @@ void enterDeviceSleep(bool buttonStillHeld) {
   }
 
   const uint64_t wakeUs = (uint64_t)esp_timer_get_time();
+  logPower(wakeForCare ? "wake-care" : (wakeForWalkComplete ? "wake-walk" : "wake-pwr"));
   uint32_t wakeEpoch = sleepEffectiveEpoch(sleepBaseEpoch, sleepStartedUs, wakeUs);
   if (wakeEpoch) {
     const uint32_t ageBefore = pet.ageMinutes;
@@ -1537,6 +1554,7 @@ void setup() {
 
   lastInteract = millis();
   scheduleNextWild(lastInteract);
+  logPower("boot");
 }
 
 // carga/descarga el sprite de LittleFS cuando cambia la especie
@@ -1557,7 +1575,7 @@ void ensureMon() {
 }
 
 bool mainScreenReadyForAmbientSound() {
-  if (audioMode() != SOUND_FULL || screenOff || dimStage > 0) return false;
+  if (audioMode() == SOUND_OFF || screenOff || dimStage > 0) return false;
   if (powerMenuOpen) return false;
   if (pet.awaitingStarter() || pet.isEgg() || pet.sleeping || pet.ceremony) return false;
   if (battleOpen || gameOpen || gameMenuOpen || walkOpen || cardOpen || galleryOpen || kbOpen || clockOpen || helpOpen) return false;
@@ -1631,7 +1649,10 @@ void maybeLightSleep(uint32_t now) {
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   esp_sleep_enable_timer_wakeup((uint64_t)ms * 1000ULL);
   esp_sleep_enable_ext0_wakeup((gpio_num_t)TP_INT, 0);
-  esp_light_sleep_start();
+  const uint64_t powerSleepStartUs = esp_timer_get_time();
+  const int powerSleepError = esp_light_sleep_start();
+  powerLogSleepResult((uint64_t)esp_timer_get_time() - powerSleepStartUs,
+                      powerSleepError, (int)esp_sleep_get_wakeup_cause());
 
   if (digitalRead(TP_INT) == LOW || esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0) {
     gTouchIrq = true;
@@ -1750,6 +1771,7 @@ void loop() {
   // and switch the display off immediately after a harmless background tap.
   now = millis();
   updateBrightness(now);
+  logPower("tick");
 
   const bool sleepSceneReady = screenOff && screenOffAt &&
                                now - screenOffAt >= AUTO_SLEEP_AFTER_OFF_MS &&
@@ -1877,6 +1899,7 @@ void handleSerial() {
   String line = Serial.readStringUntil('\n');
   line.trim();
   if (line.length() == 0) return;
+  if (powerLogCommand(line)) return;
   if (sdSerialCommand(line)) return;
 
   if (line == "TOUCH") {
@@ -2686,7 +2709,7 @@ void onTap(int16_t x, int16_t y) {
     }
     statusNoticeUntil = now + 1600UL;
     if (!pet.sleeping) sfxPlay(bondGain ? SFX_HEART : SFX_TAP);
-    if (r != PET_INTERACT_NONE && audioMode() == SOUND_FULL) speciesChirpPlay(pet.speciesId);
+    if (r != PET_INTERACT_NONE && audioMode() != SOUND_OFF) speciesChirpPlay(pet.speciesId);
     return;
   }
 }
