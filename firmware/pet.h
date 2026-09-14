@@ -24,9 +24,9 @@
 // 잠만보만 30초이며 게임 자체의 만점과 동일하다.
 static constexpr uint8_t MINIGAME_MAX_RUNNER = 50;
 static constexpr uint8_t MINIGAME_MAX_SNORLAX = 100;
-static constexpr uint8_t MINIGAME_MAX_EEVEE = 75;
-static constexpr uint8_t MINIGAME_MAX_DIGLETT = 40;
-static constexpr uint8_t MINIGAME_MAX_MAGIKARP = 30;
+static constexpr uint8_t MINIGAME_MAX_EEVEE = 35;
+static constexpr uint8_t MINIGAME_MAX_DIGLETT = 20;
+static constexpr uint8_t MINIGAME_MAX_MAGIKARP = 19;
 
 // ceremonias de fin de ciclo
 enum : uint8_t { CER_NONE = 0, CER_FAREWELL, CER_RUNAWAY, CER_RELEASE };

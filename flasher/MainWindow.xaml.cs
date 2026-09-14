@@ -192,24 +192,14 @@ public partial class MainWindow : Window
                 }
             }
 
-            var saveChoice = SaveDataChoice.Delete;
-            if (installed?.IsKorean == true)
-            {
-                var dialog = new SaveDataDialog(installed.Version) { Owner = this };
-                dialog.ShowDialog();
-                saveChoice = dialog.Choice;
-                if (saveChoice == SaveDataChoice.Cancel) return;
-            }
-            else
-            {
-                var finalAnswer = MessageBox.Show(this,
-                    $"연결된 기기를 {board.DisplayName}로 확인했습니다.\n\n" +
-                    "기존 타마포케 한글판 저장 데이터를 발견하지 못했습니다.\n" +
-                    "설치하면 기기의 기존 데이터가 모두 삭제됩니다.\n" +
-                    "설치 중에는 USB 케이블을 분리하지 마세요.\n\n계속하시겠습니까?",
-                    "새로 설치 확인", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
-                if (finalAnswer != MessageBoxResult.Yes) return;
-            }
+            // A sleeping, busy, or temporarily unresponsive device may not answer
+            // SAVEINFO even though its NVS contains a valuable save. Never turn a
+            // failed runtime probe into implicit permission to erase it.
+            var detectedVersion = installed?.Version ?? "확인 불가 (저장 데이터가 있을 수 있음)";
+            var dialog = new SaveDataDialog(detectedVersion, installed?.IsKorean == true) { Owner = this };
+            dialog.ShowDialog();
+            var saveChoice = dialog.Choice;
+            if (saveChoice == SaveDataChoice.Cancel) return;
 
             AppendLog($"설치 기종: {board.DisplayName}");
             AppendLog($"저장 데이터 처리: {(saveChoice == SaveDataChoice.Keep ? "백업 후 복원" : "삭제")}");

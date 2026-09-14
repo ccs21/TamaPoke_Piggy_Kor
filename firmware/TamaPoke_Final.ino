@@ -38,7 +38,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION_BASE "1.48.4-ko"
+#define FW_VERSION_BASE "1.48.5-ko"
 #if TAMAPOKE_BOARD_175C
   #define FW_VERSION FW_VERSION_BASE "-175c"
 #else
@@ -437,7 +437,7 @@ BattleAction battleCommEnemyAction = BATTLE_BASIC;
 
 #define WILD_COOLDOWN_MS (20UL * 60UL * 1000UL)
 #define WILD_PROMPT_MS 20000UL
-#define WILD_WAKE_CHANCE_PCT 3
+#define WILD_WAKE_CHANCE_PCT 10
 uint32_t wildPromptUntil = 0;
 uint32_t nextWildEligible = 0;
 int16_t wildPromptDex = 0;
@@ -3237,8 +3237,7 @@ void finishActivityGame() {
     gameGain = pet.applyCatchResult(gameScore);
   } else if (gameMode == 2) {
     gameNewHi = gameScore > pet.memoHi;
-    pet.applyMemoResult(gameScore);
-    gameGain = 0;  // 생활 수치 회복 게임: 전투 능력치 +N 표시는 하지 않는다.
+    gameGain = pet.applyMemoResult(gameScore);
   } else if (gameMode == 4) {
     gameNewHi = gameScore > pet.typeHi;
     pet.applyTypeResult(gameScore);
@@ -3295,7 +3294,10 @@ void registerActivityCollision(uint32_t now, int16_t x, int16_t y) {
 
 void drawActivityHeader(const char *title, uint16_t record, uint32_t now) {
   bool night = sceneHour() < 6 || sceneHour() >= 20;
-  uint16_t ink = night ? UI_INK_NIGHT : UI_INK;
+  // Runner and Eevee always use a bright sky background, even at night.
+  // Keep their header/score text dark so it remains readable.
+  uint16_t ink = (gameMode == 0 || gameMode == 2) ? UI_INK :
+                 (night ? UI_INK_NIGHT : UI_INK);
   gfx->setTextColor(ink);
   gfx->setTextSize(3);
   gfx->setCursor(CX - gfx->textWidth(title) / 2, 22);
@@ -4988,7 +4990,7 @@ bool maybeOfferFriendOnWake(uint32_t now) {
   // 성공 여부와 관계없이 다음 판정은 한 시간 뒤다. 자주 화면을 켜도
   // 확률을 연속으로 다시 굴려 방문 이벤트를 강제로 띄울 수 없다.
   nextFriendCheckEpoch = epoch + 3600UL;
-  if ((uint8_t)random(100) >= 15) return false;
+  if ((uint8_t)random(100) >= 25) return false;
   int16_t visitor = pickKnownFriend();
   if (visitor <= 0) return false;
   friendInviteDex = visitor;
@@ -5025,7 +5027,7 @@ void maybeOfferPetEvent(uint32_t now) {
   if (now < nextPetEventEligible) return;
   if (!mainScreenReadyForPetEvent()) return;
   uint8_t phase = currentDayPhase();
-  uint8_t chance = (phase == 0) ? 14 : (phase == 3 ? 8 : 10);
+  uint8_t chance = (phase == 0) ? 25 : (phase == 3 ? 15 : 20);
   if ((uint8_t)random(100) >= chance) return;
 
   petEventType = (uint8_t)random(3);

@@ -30,7 +30,7 @@
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
-    <TextBlock Text="기존 타마포케 한글판을 발견했습니다" FontSize="21" FontWeight="Bold" />
+    <TextBlock x:Name="HeadingText" Text="저장 데이터 처리 방법을 선택하세요" FontSize="21" FontWeight="Bold" />
     <StackPanel Grid.Row="1" Margin="0,18,0,18">
       <TextBlock x:Name="VersionText" Foreground="#BFD7EE" FontSize="14" />
       <TextBlock Margin="0,12,0,0" TextWrapping="Wrap" FontSize="14" LineHeight="22"

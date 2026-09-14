@@ -22,32 +22,41 @@ public sealed partial class FirmwareProbe
                 NewLine = "\n",
             };
             port.Open();
-            await Task.Delay(180, cancellationToken);
+            // USB CDC can still be settling immediately after wake/reconnect.
+            // Give it time, then retry instead of treating one missed command
+            // as proof that no Korean save exists.
+            await Task.Delay(500, cancellationToken);
             port.DiscardInBuffer();
             port.DiscardOutBuffer();
 
             var command = Encoding.ASCII.GetBytes("\nSAVEINFO\n");
-            await port.BaseStream.WriteAsync(command, cancellationToken);
-            await port.BaseStream.FlushAsync(cancellationToken);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(3));
             var response = new StringBuilder();
             var buffer = new byte[512];
-            while (!timeout.IsCancellationRequested)
+            const int maxAttempts = 5;
+            for (var attempt = 1; attempt <= maxAttempts && !SaveInfoRegex().IsMatch(response.ToString()); attempt++)
             {
-                int read;
-                try
+                log($"저장 데이터 확인 시도 {attempt}/{maxAttempts}");
+                await port.BaseStream.WriteAsync(command, cancellationToken);
+                await port.BaseStream.FlushAsync(cancellationToken);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(2));
+                while (!timeout.IsCancellationRequested)
                 {
-                    read = await port.BaseStream.ReadAsync(buffer, timeout.Token);
+                    int read;
+                    try
+                    {
+                        read = await port.BaseStream.ReadAsync(buffer, timeout.Token);
+                    }
+                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    if (read <= 0) break;
+                    response.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                    if (response.ToString().Contains("DONE", StringComparison.Ordinal)) break;
                 }
-                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                if (read <= 0) break;
-                response.Append(Encoding.UTF8.GetString(buffer, 0, read));
-                if (response.ToString().Contains("DONE", StringComparison.Ordinal)) break;
+                if (!SaveInfoRegex().IsMatch(response.ToString()) && attempt < maxAttempts)
+                    await Task.Delay(300, cancellationToken);
             }
 
             var raw = response.ToString();

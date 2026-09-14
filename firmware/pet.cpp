@@ -925,6 +925,7 @@ uint8_t Pet::applyMemoResult(uint8_t rounds) {
   if (ceremony != CER_NONE || isEgg() || rounds == 0) return 0;
   uint8_t performance = minigamePerformance(rounds, MINIGAME_MAX_EEVEE);
   uint8_t gain = minigameRewardTier(performance);
+  trDef = clamp100((int)trDef + gain);
   joy = clamp100((int)joy + 20);
   fullness = clamp100((int)fullness + 4 + performance * 16 / 100);
   int burn = (int)weight - performance * 5 / 100;
