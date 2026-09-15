@@ -6,7 +6,9 @@ namespace TamaPoke.Flasher.Services;
 
 public sealed class FirmwareBuildService(PreparedPayload payload)
 {
-    private const string BuildVersion = "public-firmware-image-v3";
+    // Increment whenever the embedded base firmware changes. The user's asset
+    // hashes alone cannot invalidate an image assembled with an older app.bin.
+    private const string BuildVersion = "public-firmware-image-v4";
     private readonly string _cacheRoot = AppStoragePaths.Under(
         "Cache", "firmware", "3.0.0");
 
