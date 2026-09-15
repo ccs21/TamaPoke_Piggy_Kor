@@ -11,6 +11,10 @@ $flasher = Join-Path $root 'flasher'
 $payload = Join-Path $flasher 'payload'
 $cache = Join-Path $root '_build'
 $release = Join-Path $root 'release'
+$flasherProject = Join-Path $flasher 'TamaPokeFlasher.csproj'
+$flasherVersion = ([xml](Get-Content -Raw -LiteralPath $flasherProject)).Project.PropertyGroup.Version | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($flasherVersion)) { throw 'Flasher version is missing from the project file.' }
+$outputFileName = "TamaPoke-Flasher-v$flasherVersion.exe"
 
 function Assert-ChildPath([string]$Path, [string]$Parent) {
     $full = [IO.Path]::GetFullPath($Path)
@@ -88,14 +92,14 @@ if (-not $SkipFirmware) {
 if (-not $SkipFlasher) {
     $publish = Join-Path $cache 'flasher-publish'
     Reset-ChildDirectory $publish $cache
-    & dotnet publish (Join-Path $flasher 'TamaPokeFlasher.csproj') -c Release -r win-x64 `
+    & dotnet publish $flasherProject -c Release -r win-x64 `
         --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true -o $publish
     if ($LASTEXITCODE -ne 0) { throw 'Public flasher publish failed.' }
 
     $package = Join-Path $release 'TamaPoke-Korean-Public-Flasher'
     Reset-ChildDirectory $package $release
-    Copy-Item -LiteralPath (Join-Path $publish 'TamaPokeFlasher.exe') -Destination (Join-Path $package 'TamaPoke-Flasher.exe')
+    Copy-Item -LiteralPath (Join-Path $publish 'TamaPokeFlasher.exe') -Destination (Join-Path $package $outputFileName)
     Copy-Item -LiteralPath (Join-Path $root 'samples\sample_Additional_assets.zip') -Destination $package
     Copy-Item -LiteralPath (Join-Path $root 'FLASHER-GUIDE.txt') -Destination $package
     foreach ($notice in @('LICENSE','CREDITS.md','THIRD_PARTY_NOTICES.md')) {

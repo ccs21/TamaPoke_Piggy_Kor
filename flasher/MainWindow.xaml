@@ -89,9 +89,15 @@
                      Margin="0,7,14,0" Foreground="{StaticResource MutedBrush}" FontSize="12"
                      TextWrapping="Wrap" />
         </StackPanel>
-        <Border Grid.Column="2" VerticalAlignment="Top" Background="#223A4F" CornerRadius="9" Padding="11,6">
-          <TextBlock Text="배포용" Foreground="#C5E9FF" FontWeight="SemiBold" />
-        </Border>
+        <StackPanel Grid.Column="2" VerticalAlignment="Top" HorizontalAlignment="Right">
+          <Border Background="#223A4F" CornerRadius="9" Padding="11,6" HorizontalAlignment="Right">
+            <TextBlock Text="공개용" Foreground="#C5E9FF" FontWeight="SemiBold" />
+          </Border>
+          <TextBlock Text="펌웨어 1.48.7-ko" Margin="0,7,0,0" HorizontalAlignment="Right"
+                     Foreground="{StaticResource MutedBrush}" FontSize="11" />
+          <TextBlock Text="플래셔 2.2.5" Margin="0,2,0,0" HorizontalAlignment="Right"
+                     Foreground="{StaticResource MutedBrush}" FontSize="11" />
+        </StackPanel>
       </Grid>
       </StackPanel>
     </Border>

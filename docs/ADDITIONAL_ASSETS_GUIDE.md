@@ -81,7 +81,7 @@ Windows에서 만드는 가장 간단한 방법:
 6. `Visual`과 `Audio` 두 폴더를 함께 선택합니다.
 7. 마우스 오른쪽 버튼의 압축 기능으로 ZIP을 만듭니다.
 8. 이름을 정확히 `Additional_assets.zip`으로 바꿉니다.
-9. `TamaPoke-Flasher.exe`, 원본 `sample_Additional_assets.zip`과 같은 폴더에
+9. `TamaPoke-Flasher-v2.2.5.exe`, 원본 `sample_Additional_assets.zip`과 같은 폴더에
    둡니다.
 
 ## 3. 이미지 공통 규칙
