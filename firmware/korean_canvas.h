@@ -15,6 +15,16 @@ class KoreanCanvas : public Arduino_Canvas {
     Arduino_Canvas::setTextSize(size < 2 ? 2 : size);
   }
 
+
+  // Every positioned text run starts a new UTF-8 sequence. If a formatted
+  // buffer was truncated in the middle of a Korean glyph, carrying that
+  // decoder state into the next label turns its first three bytes into "???".
+  void setCursor(int16_t x, int16_t y) {
+    utf8Codepoint_ = 0;
+    utf8Remaining_ = 0;
+    Arduino_Canvas::setCursor(x, y);
+  }
+
   size_t write(uint8_t value) override;
   int16_t textWidth(const char *text) const;
   uint8_t koreanPixelSize() const;

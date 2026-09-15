@@ -34,7 +34,7 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        AppendLog("타마포케 배포용 플래셔 2.2.4 시작");
+        AppendLog("타마포케 배포용 플래셔 2.2.5 시작");
         AppendLog($"로그 파일: {_logFilePath}");
         RefreshAssetStatus();
         await RefreshDevicesAsync();

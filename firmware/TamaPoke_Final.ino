@@ -38,7 +38,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION_BASE "1.48.6-ko"
+#define FW_VERSION_BASE "1.48.7-ko"
 #if TAMAPOKE_BOARD_175C
   #define FW_VERSION FW_VERSION_BASE "-175c"
 #else
