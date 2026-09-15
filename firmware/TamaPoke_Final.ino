@@ -38,7 +38,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION_BASE "1.48.5-ko"
+#define FW_VERSION_BASE "1.48.6-ko"
 #if TAMAPOKE_BOARD_175C
   #define FW_VERSION FW_VERSION_BASE "-175c"
 #else
@@ -435,9 +435,11 @@ bool battleCommLocalActionReady = false;
 BattleAction battleCommLocalAction = BATTLE_BASIC;
 BattleAction battleCommEnemyAction = BATTLE_BASIC;
 
-#define WILD_COOLDOWN_MS (20UL * 60UL * 1000UL)
+#define WILD_COOLDOWN_MS (15UL * 60UL * 1000UL)
 #define WILD_PROMPT_MS 20000UL
-#define WILD_WAKE_CHANCE_PCT 10
+#define WILD_WAKE_CHANCE_PCT 7
+#define FRIEND_EVENT_COOLDOWN_SEC (15UL * 60UL)
+#define FRIEND_WAKE_CHANCE_PCT 7
 uint32_t wildPromptUntil = 0;
 uint32_t nextWildEligible = 0;
 int16_t wildPromptDex = 0;
@@ -446,6 +448,8 @@ uint8_t wildPromptLevel = 1;
 void scheduleNextWild(uint32_t now);
 void maybeOfferWildEncounterOnWake(uint32_t now);
 bool maybeOfferFriendOnWake(uint32_t now);
+bool mainScreenReadyForWild();
+void updateHomeReturnEventCheck(uint32_t now);
 
 #define PET_EVENT_COOLDOWN_MS (15UL * 60UL * 1000UL)
 #define PET_EVENT_PROMPT_MS 18000UL
@@ -1705,6 +1709,7 @@ void loop() {
   else if (!sitterNow && sitterPmd.loaded) sitterPmd.unload();
   setPowerCacheInterval(powerSave ? 10000UL : 2000UL);
   pet.ensureDailyGoals();
+  updateHomeReturnEventCheck(now);
   maybeOfferPetEvent(now);
   if (friendInviteUntil && (int32_t)(now - friendInviteUntil) >= 0) {
     int16_t visitor = friendInviteDex;
@@ -4947,6 +4952,47 @@ void scheduleNextWild(uint32_t now) {
   nextWildEligible = now + WILD_COOLDOWN_MS;
 }
 
+void updateHomeReturnEventCheck(uint32_t now) {
+  static bool initialized = false;
+  static bool previousGame = false;
+  static uint8_t previousGameMode = 0;
+  static bool previousWalk = false;
+  static bool previousBattle = false;
+  static bool previousCommunication = false;
+  static bool previousSleeping = false;
+  static bool previousSitter = false;
+  static bool pending = false;
+
+  const bool communicating = communicationState() != COMM_OFF;
+  const bool sitter = pet.sitterActive(pet.lastSeenEpoch);
+  if (initialized) {
+    const bool minigameEnded = previousGame && !gameOpen && previousGameMode <= 4;
+    const bool returnedHome = minigameEnded || (previousWalk && !walkOpen) ||
+                              (previousBattle && !battleOpen) ||
+                              (previousCommunication && !communicating) ||
+                              (previousSleeping && !pet.sleeping) ||
+                              (previousSitter && !sitter);
+    if (returnedHome) pending = true;
+  } else {
+    initialized = true;
+  }
+
+  previousGame = gameOpen;
+  previousGameMode = gameMode;
+  previousWalk = walkOpen;
+  previousBattle = battleOpen;
+  previousCommunication = communicating;
+  previousSleeping = pet.sleeping;
+  previousSitter = sitter;
+
+  // Some closing animations clear their mode before the home screen becomes
+  // available. Keep one pending roll and consume it only when Home is ready.
+  if (!pending || !mainScreenReadyForWild()) return;
+  pending = false;
+  const bool friendOffered = maybeOfferFriendOnWake(now);
+  if (!friendOffered) maybeOfferWildEncounterOnWake(now);
+}
+
 bool mainScreenReadyForWild() {
   if (!homeNoticeSlotFree() || wasPressed) return false;
   if (screenOff || pet.awaitingStarter() || pet.isEgg() || pet.sleeping || pet.ceremony ||
@@ -4967,12 +5013,14 @@ void maybeOfferWildEncounterOnWake(uint32_t now) {
   if (wildPromptUntil) return;
   if ((int32_t)(now - nextWildEligible) < 0) return;
   if (!mainScreenReadyForWild()) return;
+  // A probability roll consumes this opportunity even when it misses. This
+  // prevents repeated menu exits from rerolling until an encounter appears.
+  scheduleNextWild(now);
   if ((uint8_t)random(100) >= WILD_WAKE_CHANCE_PCT) return;
 
   wildPromptDex = pickWildSpecies((uint8_t)random(100));
   wildPromptLevel = wildLevelFor(pet.level(), (uint8_t)random(100));
   wildPromptUntil = now + WILD_PROMPT_MS;
-  scheduleNextWild(now);
   markUiDirty();
   sfxPlay(SFX_MENU);
 }
@@ -4983,14 +5031,14 @@ bool maybeOfferFriendOnWake(uint32_t now) {
   if (!epoch) epoch = pet.lastSeenEpoch;
   if (!epoch) return false;
   if (nextFriendCheckEpoch == 0) {
-    nextFriendCheckEpoch = epoch + 3600UL;
+    nextFriendCheckEpoch = epoch + FRIEND_EVENT_COOLDOWN_SEC;
     return false;
   }
   if (epoch < nextFriendCheckEpoch) return false;
-  // 성공 여부와 관계없이 다음 판정은 한 시간 뒤다. 자주 화면을 켜도
+  // 성공 여부와 관계없이 다음 판정은 15분 뒤다. 자주 화면을 켜도
   // 확률을 연속으로 다시 굴려 방문 이벤트를 강제로 띄울 수 없다.
-  nextFriendCheckEpoch = epoch + 3600UL;
-  if ((uint8_t)random(100) >= 25) return false;
+  nextFriendCheckEpoch = epoch + FRIEND_EVENT_COOLDOWN_SEC;
+  if ((uint8_t)random(100) >= FRIEND_WAKE_CHANCE_PCT) return false;
   int16_t visitor = pickKnownFriend();
   if (visitor <= 0) return false;
   friendInviteDex = visitor;

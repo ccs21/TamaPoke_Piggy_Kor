@@ -100,7 +100,7 @@ void powerLogRecord(const char *event, const char *scene, bool screenOff,
   const uint64_t device = ESP.getEfuseMac();
   char row[768];
   int length = snprintf(row, sizeof(row),
-    "PL,%04lx%08lx,%s,1.48.5-ko,%08lx,%lu,%llu,%s,%s,%d,%d,%d,%d,%d,%d,%d,"
+    "PL,%04lx%08lx,%s,1.48.6-ko,%08lx,%lu,%llu,%s,%s,%d,%d,%d,%d,%d,%d,%d,"
     "%d,%d,%d,%d,%d,%d,%d,%u,%u,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%llu,%d,%d,%d,%lu\n",
     (unsigned long)(device >> 32), (unsigned long)(uint32_t)device,
     TAMAPOKE_BOARD_NAME, (unsigned long)bootId, (unsigned long)rtcEpoch(),

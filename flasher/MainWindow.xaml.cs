@@ -34,7 +34,7 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        AppendLog("타마포케 배포용 플래셔 2.2.0 시작");
+        AppendLog("타마포케 배포용 플래셔 2.2.3 시작");
         AppendLog($"로그 파일: {_logFilePath}");
         RefreshAssetStatus();
         await RefreshDevicesAsync();
@@ -192,24 +192,55 @@ public partial class MainWindow : Window
                 }
             }
 
-            // A sleeping, busy, or temporarily unresponsive device may not answer
-            // SAVEINFO even though its NVS contains a valuable save. Never turn a
-            // failed runtime probe into implicit permission to erase it.
-            var detectedVersion = installed?.Version ?? "확인 불가 (저장 데이터가 있을 수 있음)";
-            var dialog = new SaveDataDialog(detectedVersion, installed?.IsKorean == true) { Owner = this };
-            dialog.ShowDialog();
-            var saveChoice = dialog.Choice;
-            if (saveChoice == SaveDataChoice.Cancel) return;
+            string? backupHash = null;
+            SaveDataChoice saveChoice;
+            if (installed is { HasExistingSave: false })
+            {
+                saveChoice = SaveDataChoice.Delete;
+                AppendLog("새로 생성된 빈 저장 데이터입니다. 백업을 생략합니다.");
+            }
+            else
+            {
+                // A blank board cannot answer SAVEINFO. Inspect its NVS before
+                // showing the preservation dialog so a new user never gets sent
+                // into an impossible backup of an all-0xFF partition.
+                if (installed is null)
+                {
+                    backupPath = CreateBackupFilePath(board, selected.PortName);
+                    backupHash = await esptool.InspectAndBackupNvsAsync(
+                        selected.PortName, backupPath, AppendLog, cancellationToken);
+                    if (backupHash is null) backupPath = null;
+                }
+
+                if (installed is null && backupHash is null)
+                {
+                    saveChoice = SaveDataChoice.Delete;
+                }
+                else
+                {
+                    var detectedVersion = installed?.Version ?? "다른 펌웨어 또는 확인 불가";
+                    var dialog = new SaveDataDialog(detectedVersion, installed?.IsKorean == true) { Owner = this };
+                    dialog.ShowDialog();
+                    saveChoice = dialog.Choice;
+                    if (saveChoice == SaveDataChoice.Cancel) return;
+                }
+            }
 
             AppendLog($"설치 기종: {board.DisplayName}");
             AppendLog($"저장 데이터 처리: {(saveChoice == SaveDataChoice.Keep ? "백업 후 복원" : "삭제")}");
 
-            string? backupHash = null;
             if (saveChoice == SaveDataChoice.Keep)
             {
-                backupPath = CreateBackupFilePath(board, selected.PortName);
-                backupHash = await esptool.BackupNvsAsync(selected.PortName, backupPath, AppendLog,
-                    progress, cancellationToken);
+                if (backupHash is null)
+                {
+                    backupPath = CreateBackupFilePath(board, selected.PortName);
+                    backupHash = await esptool.BackupNvsAsync(selected.PortName, backupPath, AppendLog,
+                        progress, cancellationToken);
+                }
+                else
+                {
+                    UpdateProgress(new ProgressUpdate(12, "저장 데이터 백업 완료", "미리 검사한 저장 데이터 백업을 사용합니다."));
+                }
             }
 
             var additional = await _additionalAssets.PrepareAsync(assetStatus, allowSampleSupplement,
