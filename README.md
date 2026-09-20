@@ -48,7 +48,7 @@ Windows 플래셔와 자산 처리 방식을 광범위하게 변경했습니다.
 [처음 설치하기 상세 안내](docs/INSTALLATION_GUIDE.md)를 먼저 읽어 주세요.
 
 1. GitHub 릴리스에서 공개 플래셔 ZIP을 받아 원하는 폴더에 풉니다.
-2. 압축을 풀면 `TamaPoke-Flasher-v2.2.5.exe`와 `sample_Additional_assets.zip`이 함께
+2. 압축을 풀면 `TamaPoke-Flasher-v2.2.6.exe`와 `sample_Additional_assets.zip`이 함께
    들어 있습니다. 기본 설치에는 별도 자산 준비가 필요하지 않습니다.
 3. ESP32-S3 기기의 화면이 켜진 상태로 USB-C 데이터 케이블을 연결합니다.
 4. 플래셔를 실행하고 `새로고침`으로 자산 감지 상태를 확인합니다.

@@ -16,7 +16,7 @@
 
 준비 순서
 ---------
-1. TamaPoke-Flasher-v2.2.5.exe를 원하는 폴더에 둡니다.
+1. TamaPoke-Flasher-v2.2.6.exe를 원하는 폴더에 둡니다.
 2. 함께 들어 있는 sample_Additional_assets.zip을 같은 폴더에 그대로 둡니다.
 3. ESP32-S3 기기의 화면이 켜진 상태로 USB-C 데이터 케이블을 연결합니다.
 4. 플래셔를 실행하고 새로고침으로 추가 자산 감지를 확인합니다.

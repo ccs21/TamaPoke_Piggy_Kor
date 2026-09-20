@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Ports;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -20,6 +21,7 @@ public sealed partial class FirmwareProbe
                 ReadTimeout = 300,
                 WriteTimeout = 1000,
                 NewLine = "\n",
+                Encoding = Encoding.UTF8,
             };
             port.Open();
             // USB CDC can still be settling immediately after wake/reconnect.
@@ -36,24 +38,25 @@ public sealed partial class FirmwareProbe
             for (var attempt = 1; attempt <= maxAttempts && !SaveInfoRegex().IsMatch(response.ToString()); attempt++)
             {
                 log($"저장 데이터 확인 시도 {attempt}/{maxAttempts}");
-                await port.BaseStream.WriteAsync(command, cancellationToken);
-                await port.BaseStream.FlushAsync(cancellationToken);
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(2));
-                while (!timeout.IsCancellationRequested)
+                cancellationToken.ThrowIfCancellationRequested();
+                port.Write(command, 0, command.Length);
+                var attemptTimer = Stopwatch.StartNew();
+                while (attemptTimer.Elapsed < TimeSpan.FromSeconds(2))
                 {
-                    int read;
-                    try
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var available = port.BytesToRead;
+                    if (available > 0)
                     {
-                        read = await port.BaseStream.ReadAsync(buffer, timeout.Token);
+                        var read = port.Read(buffer, 0, Math.Min(buffer.Length, available));
+                        if (read > 0)
+                        {
+                            response.Append(Encoding.UTF8.GetString(buffer, 0, read));
+                            if (response.ToString().Contains("DONE", StringComparison.Ordinal) ||
+                                SaveInfoRegex().IsMatch(response.ToString()))
+                                break;
+                        }
                     }
-                    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                    if (read <= 0) break;
-                    response.Append(Encoding.UTF8.GetString(buffer, 0, read));
-                    if (response.ToString().Contains("DONE", StringComparison.Ordinal)) break;
+                    await Task.Delay(50, cancellationToken);
                 }
                 if (!SaveInfoRegex().IsMatch(response.ToString()) && attempt < maxAttempts)
                     await Task.Delay(300, cancellationToken);
@@ -77,7 +80,8 @@ public sealed partial class FirmwareProbe
         {
             throw;
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or
+                                   UnauthorizedAccessException or TimeoutException)
         {
             log($"실행 펌웨어 확인 생략: {ex.Message}");
             return null;

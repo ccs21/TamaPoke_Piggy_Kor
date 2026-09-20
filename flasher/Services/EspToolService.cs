@@ -11,38 +11,6 @@ public sealed partial class EspToolService(string esptoolPath)
     public const int NvsOffset = 0x9000;
     public const int NvsSize = 0x5000;
 
-    public async Task<string?> InspectAndBackupNvsAsync(
-        string portName,
-        string destination,
-        Action<string> log,
-        CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(destination)
-                        ?? throw new InvalidOperationException("백업 폴더 경로가 올바르지 않습니다.");
-        Directory.CreateDirectory(directory);
-        if (File.Exists(destination)) File.Delete(destination);
-
-        log("실행 펌웨어가 응답하지 않아 저장 영역을 직접 확인합니다.");
-        await RunAsync(portName, 115200, "no-reset",
-            ["read-flash", "--no-progress", $"0x{NvsOffset:X}", $"0x{NvsSize:X}", destination],
-            log, null, 0, 0, cancellationToken);
-
-        var bytes = await File.ReadAllBytesAsync(destination, cancellationToken);
-        if (bytes.Length != NvsSize)
-            throw new InvalidDataException($"저장 데이터 검사 크기가 올바르지 않습니다: {bytes.Length}바이트");
-        if (bytes.All(value => value == 0xFF))
-        {
-            File.Delete(destination);
-            log("비어 있는 신규 기기로 확인했습니다. 저장 데이터 백업을 생략합니다.");
-            return null;
-        }
-
-        var hash = Convert.ToHexString(SHA256.HashData(bytes));
-        log($"기존 저장 영역을 발견해 안전 백업했습니다: {destination}");
-        log($"저장 데이터 SHA-256: {hash}");
-        return hash;
-    }
-
     public async Task<int> DetectFlashSizeAsync(
         string portName,
         Action<string> log,

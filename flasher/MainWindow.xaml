@@ -95,7 +95,7 @@
           </Border>
           <TextBlock Text="펌웨어 1.48.7-ko" Margin="0,7,0,0" HorizontalAlignment="Right"
                      Foreground="{StaticResource MutedBrush}" FontSize="11" />
-          <TextBlock Text="플래셔 2.2.5" Margin="0,2,0,0" HorizontalAlignment="Right"
+          <TextBlock Text="플래셔 2.2.6" Margin="0,2,0,0" HorizontalAlignment="Right"
                      Foreground="{StaticResource MutedBrush}" FontSize="11" />
         </StackPanel>
       </Grid>

@@ -34,7 +34,7 @@ public partial class MainWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        AppendLog("타마포케 배포용 플래셔 2.2.5 시작");
+        AppendLog("타마포케 배포용 플래셔 2.2.6 시작");
         AppendLog($"로그 파일: {_logFilePath}");
         RefreshAssetStatus();
         await RefreshDevicesAsync();
@@ -194,36 +194,30 @@ public partial class MainWindow : Window
 
             string? backupHash = null;
             SaveDataChoice saveChoice;
-            if (installed is { HasExistingSave: false })
+            if (installed is not { IsKorean: true })
+            {
+                var proceed = MessageBox.Show(this,
+                    "기존 TamaPoke 돼둥이 버전 펌웨어가 감지되지 않습니다.\n" +
+                    "기기를 초기화 후 TamaPoke 돼둥이 버전을 설치합니다.\n\n" +
+                    "만약, TamaPoke 돼둥이 버전을 이용중인데 이 메세지를 보셨다면,\n" +
+                    "설치를 취소하고 기기를 PC와 분리한 뒤 다시 연결하여 재시도 해 주세요.",
+                    "TamaPoke 돼둥이 버전 미감지",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel);
+                if (proceed != MessageBoxResult.OK) return;
+                saveChoice = SaveDataChoice.Delete;
+                AppendLog("TamaPoke 돼둥이 버전이 감지되지 않아 백업 없이 신규 설치를 진행합니다.");
+            }
+            else if (installed.HasExistingSave == false)
             {
                 saveChoice = SaveDataChoice.Delete;
                 AppendLog("새로 생성된 빈 저장 데이터입니다. 백업을 생략합니다.");
             }
             else
             {
-                // A blank board cannot answer SAVEINFO. Inspect its NVS before
-                // showing the preservation dialog so a new user never gets sent
-                // into an impossible backup of an all-0xFF partition.
-                if (installed is null)
-                {
-                    backupPath = CreateBackupFilePath(board, selected.PortName);
-                    backupHash = await esptool.InspectAndBackupNvsAsync(
-                        selected.PortName, backupPath, AppendLog, cancellationToken);
-                    if (backupHash is null) backupPath = null;
-                }
-
-                if (installed is null && backupHash is null)
-                {
-                    saveChoice = SaveDataChoice.Delete;
-                }
-                else
-                {
-                    var detectedVersion = installed?.Version ?? "다른 펌웨어 또는 확인 불가";
-                    var dialog = new SaveDataDialog(detectedVersion, installed?.IsKorean == true) { Owner = this };
-                    dialog.ShowDialog();
-                    saveChoice = dialog.Choice;
-                    if (saveChoice == SaveDataChoice.Cancel) return;
-                }
+                var dialog = new SaveDataDialog(installed.Version, true) { Owner = this };
+                dialog.ShowDialog();
+                saveChoice = dialog.Choice;
+                if (saveChoice == SaveDataChoice.Cancel) return;
             }
 
             AppendLog($"설치 기종: {board.DisplayName}");
@@ -231,16 +225,9 @@ public partial class MainWindow : Window
 
             if (saveChoice == SaveDataChoice.Keep)
             {
-                if (backupHash is null)
-                {
-                    backupPath = CreateBackupFilePath(board, selected.PortName);
-                    backupHash = await esptool.BackupNvsAsync(selected.PortName, backupPath, AppendLog,
-                        progress, cancellationToken);
-                }
-                else
-                {
-                    UpdateProgress(new ProgressUpdate(12, "저장 데이터 백업 완료", "미리 검사한 저장 데이터 백업을 사용합니다."));
-                }
+                backupPath = CreateBackupFilePath(board, selected.PortName);
+                backupHash = await esptool.BackupNvsAsync(selected.PortName, backupPath, AppendLog,
+                    progress, cancellationToken);
             }
 
             var additional = await _additionalAssets.PrepareAsync(assetStatus, allowSampleSupplement,

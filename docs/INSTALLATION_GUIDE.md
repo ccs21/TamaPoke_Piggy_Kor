@@ -16,11 +16,11 @@
 타마포케 한글판 설치에는 다음 두 파일이 필요합니다.
 
 ```text
-TamaPoke-Flasher-v2.2.5.exe
+TamaPoke-Flasher-v2.2.6.exe
 sample_Additional_assets.zip
 ```
 
-`TamaPoke-Flasher-v2.2.5.exe`는 필요한 파일을 내려받고, 연결된 기종에 맞는 펌웨어를
+`TamaPoke-Flasher-v2.2.6.exe`는 필요한 파일을 내려받고, 연결된 기종에 맞는 펌웨어를
 만든 뒤 기기에 설치하는 프로그램입니다.
 
 `sample_Additional_assets.zip`에는 기본 로딩·포획·미니게임 이미지와 음원
@@ -60,7 +60,7 @@ C:\TamaPoke-Installer
 
 ```text
 C:\TamaPoke-Installer
-├─ TamaPoke-Flasher-v2.2.5.exe
+├─ TamaPoke-Flasher-v2.2.6.exe
 └─ sample_Additional_assets.zip
 ```
 
@@ -73,7 +73,7 @@ C:\TamaPoke-Installer
 2. 최신 공개 플래셔 ZIP을 내려받습니다.
 3. 내려받은 ZIP을 마우스 오른쪽 버튼으로 누릅니다.
 4. `압축 풀기` 또는 `모두 압축 풀기`를 선택합니다.
-5. 압축을 푼 폴더에서 `TamaPoke-Flasher-v2.2.5.exe`와
+5. 압축을 푼 폴더에서 `TamaPoke-Flasher-v2.2.6.exe`와
    `sample_Additional_assets.zip`을 찾습니다.
 6. 두 파일을 함께 앞에서 만든 설치 폴더에 넣습니다.
 
@@ -314,7 +314,7 @@ Windows가 확장자를 숨긴 상태에서 `BAT.wav.mp3`처럼 이중 확장자
 3. 마우스 오른쪽 버튼을 누릅니다.
 4. `ZIP 파일로 압축`을 선택합니다.
 5. 만들어진 ZIP 이름을 `Additional_assets.zip`으로 변경합니다.
-6. `TamaPoke-Flasher-v2.2.5.exe`와 같은 폴더에 넣습니다.
+6. `TamaPoke-Flasher-v2.2.6.exe`와 같은 폴더에 넣습니다.
 7. 원본 `sample_Additional_assets.zip`도 같은 폴더에 그대로 둡니다.
 
 ZIP을 열었을 때 가장 먼저 `Visual`과 `Audio` 두 폴더가 보이는 것이 가장
@@ -339,7 +339,7 @@ Additional_assets.zip
 
 ## 13. 플래셔 실행하기
 
-1. `TamaPoke-Flasher-v2.2.5.exe`를 실행합니다.
+1. `TamaPoke-Flasher-v2.2.6.exe`를 실행합니다.
 2. `새로고침` 버튼을 누릅니다.
 3. 추가 이미지와 음원 상태가 정상으로 표시되는지 확인합니다.
 4. 연결된 COM 포트를 확인합니다.
@@ -409,7 +409,7 @@ TamaPoke-Flasher-Data
 
 ### 추가 자산 ZIP을 찾지 못했다고 나옵니다
 
-`sample_Additional_assets.zip`과 `TamaPoke-Flasher-v2.2.5.exe`가 같은 폴더에 있는지
+`sample_Additional_assets.zip`과 `TamaPoke-Flasher-v2.2.6.exe`가 같은 폴더에 있는지
 확인하세요. 배포 ZIP 안에서 실행하지 말고 두 파일을 모두 압축 해제해야 합니다.
 
 ### 추가 자산이 누락되었다고 나옵니다
